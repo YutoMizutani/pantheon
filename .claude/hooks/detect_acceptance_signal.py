@@ -187,7 +187,11 @@ def _drain_corrections(sid: str) -> list[dict]:
 
 
 def _corrections_block(items: list[dict]) -> str:
-    """Render queued corrections as a reminder section, or '' when empty."""
+    """Render queued corrections as a reminder section, or '' when empty.
+
+    Dynamic data only (event list). The processing policy lives in the agent
+    definition (.claude/agents/self-reflection.md「correction 処理ワークフロー」節)
+    — single owner per path; do not inline policy text here."""
     if not items:
         return ""
     lines = []
@@ -202,12 +206,7 @@ def _corrections_block(items: list[dict]) -> str:
 **処理待ち correction イベント ({len(items)} 件 — やりとり中はキューに積むだけにし、この acceptance 時点で一括処理する):**
 {joined}
 
-**correction 処理ワークフロー (下の META mining ワークフローより先に、各イベントへ適用):**
-- 各イベントの transcript_path を読む (本 session と異なる場合がある)。prompt_excerpt が指す user の訂正発話を transcript 内で特定し、**その発話より前の直近 Claude action を訂正対象とする** (訂正発話より後の self-action を学習対象にしない — 原環境で実際に起きた取り違え事例への対策)。
-- `feedback_classify_failure_saying_vs_judgement.md` に従い saying-fault / judgement-fault / hybrid に分類し、既存 memory を grep して拡張 or 新規起案 → `MEMORY.md` index に 1 行 (形式・字数制約は下の step 4 と同一)。
-- saying-fault なら hook スクリプトを起案し、settings 登録 diff を `~/.claude/runtime/pending_hook_registrations.json` に queue する (settings 直接編集禁止)。層判定 (frame/local)・置き場・登録先は下の step 4 の規定と同一 — ユーザー固有語彙を含む hook は `.claude/hooks/local/` + `settings.local.json` 向け。
-- learning に値しないイベント (言い換えだけ等) は個別に no-action で skip してよい。
-- 出力サマリの先頭に `corrections: <処理 N 件 / no-action M 件>` の 1 行を追加する。
+処理方針は agent 定義 (.claude/agents/self-reflection.md) の「correction 処理ワークフロー」節に従う — META mining より先に各イベントへ適用する。
 """
 
 
