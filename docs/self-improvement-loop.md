@@ -33,7 +33,7 @@ memory の参照も記録 ── touch_memory_on_read.py → telemetry/memory_to
 
 補完する 2 系統（どちらも同梱・配線済み）:
 
-- **detect_acceptance_signal.py** — 「ok / 完了」等の**完全一致**でのみ発火し、META reflection を起動する。訂正シグナルだけでは「ユーザーがわざわざ指摘した失敗」しか学べない、という非対称への手当て。完全一致トリガなので observe モード不要で運用できる。**責務はシグナル検出と起動のみ** — 振り返りの方針（採掘 category〔冗長手順・避けられた往復・遅すぎた診断・コミュニケーション乖離 等〕・ワークフロー・layer 判定）は `.claude/agents/self-reflection.md`（frame 層エージェント定義）に分離してあり、hook は session_id / transcript / 訂正キューの**動的入力だけ**を渡して spawn する。
+- **detect_acceptance_signal.py** — 「ok / 完了」等の**完全一致**でのみ発火し、META reflection を起動する。訂正シグナルだけでは「ユーザーがわざわざ指摘した失敗」しか学べない、という非対称への手当て。完全一致トリガなので observe モード不要で運用できる。**責務はシグナル検出と起動のみ** — 振り返りの方針（一次レンズ・採掘 category・ワークフロー・layer 判定）は `.claude/agents/self-reflection.md`（frame 層エージェント定義）に分離してあり、hook は session_id / transcript / 訂正キューの**動的入力だけ**を渡して spawn する。エージェントは各セッションを**まず『user と Claude の対話』として一次レンズで読み**（user の framing に Claude が収束したか乖離したか／同趣旨の言い直し・差し戻しの反復）、その上で効率・プロセスの採掘 category（冗長手順・避けられた往復・遅すぎた診断 等）を**二次軸**として回す。重心を対話理解に置くのは、効率採掘へ偏った reflection が「user が正しく言い続けたのに自説で動き続けた」型の最重要失敗を構造的に取りこぼしたため。
 - **propose_claudemd_updates.py** — Stop 時に「このプロジェクトに固有の規範化候補」を更新案として `~/.claude/runtime/pending_claudemd_updates.json` に queue する（user が一括レビュー）。target は二層構成に従う: project 配下なら `projects/<X>/CLAUDE.md`、それ以外は `CLAUDE.local.md`（ルート CLAUDE.md はルーティング+機構のみで対象外）。各 entry は target から導出した `layer`（local/frame）を持つ。
 
 ## 機構と産物 — 何が配線されていて、何がされていないか

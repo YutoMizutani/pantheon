@@ -231,12 +231,12 @@
 
 **置き換える素の Claude 挙動**: 「違う」「stop」「やめて」のユーザー correction を flat な追加要求として処理し、直前の方針を継続。
 
-**ルール**: ユーザー prompt に correction phrase が含まれたら surface して、Claude が「あ、間違えた」と方針転換 mode に入るよう促す。
+**ルール**: ユーザー prompt に correction phrase が含まれたら、その訂正を**キューに記録**し、タスク締め（acceptance シグナル）時に一括で reflection（memory / hook 起案）にかけて規範化する。やりとり中は silent — mid-conversation の自己発火は「過剰実装」として廃し batched-queue 方式に変更済み。
 
 **3 層**:
 - CLAUDE.md: なし
 - Memory: 個別 memory なし（運用は hook が単独で行う meta-tool）
-- Hook: [`detect_correction_signal_v2.py`](../.claude/hooks/detect_correction_signal_v2.py) (配線済み — 同梱 hook) — UserPromptSubmit。同梱の v2 は検出に加えて AUTO-LEARN reflection (memory / hook 起案) の起動まで行う
+- Hook: [`detect_correction_signal_v2.py`](../.claude/hooks/detect_correction_signal_v2.py) (配線済み — 同梱 hook) — UserPromptSubmit。v2 は correction phrase を検出して訂正キューに 1 件 append し **silent**（third-party 否定・acceptance 接頭辞は除外）。AUTO-LEARN reflection（memory / hook 起案）は次の acceptance シグナル時に [`detect_acceptance_signal.py`](../.claude/hooks/detect_acceptance_signal.py) がキューを drain して一括起動する
 
 **効いている根拠**: 「同じ失敗の 2 回目で停止」ルール (`feedback_never_anger_user_absolute.md`) を機械的に支える infrastructure。
 
