@@ -1,0 +1,21 @@
+# Ripgrep ignore file — Claude Code の Grep/探索ツールに効く。
+#
+# このリポジトリをモノレポ運用する場合、プロジェクト配下に思考ログや
+# 生成物が大量に溜まる。横断検索を安く保つため、churny なディレクトリを
+# ここで抑制する（Read での個別読み込みは引き続き可能）。
+
+# 思考ログ・一時ファイル
+**/logs/**
+**/tmp/**
+
+# Build / dist / dependency artifacts
+**/build/**
+**/dist/**
+**/node_modules/**
+**/.venv/**
+**/__pycache__/**
+**/*.pyc
+**/.pytest_cache/**
+**/.mypy_cache/**
+**/.ruff_cache/**
+**/*.egg-info/**

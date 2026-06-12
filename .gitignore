@@ -1,0 +1,105 @@
+# ============================================================
+# 二層構造 — tracked = フレーム層（汎用機構）/ ignored = ローカル層（ユーザー固有）
+#
+# 原則「1 パス 1 オーナー」: どのパスもどちらか一方にだけ属する。
+# 同一パスを「リポジトリ版とローカル版で別内容」にしない（永続 dirty の温床）。
+#
+# - ルート直下は default-deny: 運用中に増える個人ディレクトリ・個人メモが
+#   誤って commit されないよう、track するものだけを明示的に開ける。
+# - フレーム層ディレクトリ（.claude/ docs/ heaven/tools/）の内側は default-allow:
+#   運用中に増えた hook / doc / 計器が git status に現れ、
+#   「commit してフレームを育てるか、ローカルに残すか」の判断を促す。
+# - 環境固有の ignore をここに足さない — それは .git/info/exclude へ
+#   （このファイル自体がフレーム層のため、汎用パターンだけを持つ）。
+# ============================================================
+
+# --- ルート: 明示した frame ファイルだけ track ---
+/*
+!/.gitignore
+!/.ignore
+!/CLAUDE.md
+!/CLAUDE.local.md.example
+!/README.md
+!/LICENSE
+!/.claude/
+!/docs/
+!/heaven/
+!/projects/
+
+# --- .claude/: 配線とフレーム拡張は track、個人設定と実行時状態はローカル ---
+/.claude/settings.local.json*
+/.claude/runtime/
+/.claude/scheduled_tasks.lock
+/.claude/scheduled_tasks.json
+# ローカル層 hook (ユーザー固有語彙を encode したもの)。自己改善ループが
+# 層判定 local とした hook はここに置かれ、構造的に commit 候補へ現れない。
+/.claude/hooks/local/*
+!/.claude/hooks/local/README.md
+
+# --- heaven/: エージェントの自由領域はローカルが既定。出荷する計器だけ frame ---
+/heaven/*
+!/heaven/README.md
+!/heaven/tools/
+!/heaven/memory/
+/heaven/memory/*
+!/heaven/memory/.gitkeep
+
+# --- projects/: ユーザーの持ち物。テンプレートだけ frame ---
+#     公開したいプロジェクトがある場合のみ !/projects/<name>/ を自分の fork で追記する。
+/projects/*
+!/projects/example-infra/
+
+# ============================================================
+# 以下は汎用の衛生パターン（tracked ディレクトリ内側にも効く）
+# ============================================================
+
+# Environment variables
+.env
+.env.*
+!.env.example
+.envrc
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Python tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+
+# Temporary / churny
+tmp/
+logs/
+.archive/
+*.bak
+*.bak.*
+*.bak-*
+
+# Playwright MCP artifacts (output dir; should be redirected to ~/.cache/playwright-mcp)
+.playwright-mcp/
+
+# Logs
+*.log
+pm2-logs/
+
+# OS
+.DS_Store
+Thumbs.db
