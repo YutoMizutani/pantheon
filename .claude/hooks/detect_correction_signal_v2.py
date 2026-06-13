@@ -52,77 +52,31 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-# High-precision correction phrases. Tuned for low false-positive rate —
-# casual "違う" without context is the main FP risk, mitigated by requiring
-# a prior assistant turn in the transcript.
-_CORRECTION_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"違う"),
-    re.compile(r"ちがう"),
-    re.compile(r"ダメ"),
-    re.compile(r"だめ"),
-    re.compile(r"間違って(?:る|いる)"),
-    re.compile(r"間違い"),
-    re.compile(r"失敗してない\?"),
-    re.compile(r"失敗じゃない\?"),
-    re.compile(r"機能してる\?"),
-    re.compile(r"機能してない\?"),
-    re.compile(r"動いてない\?"),
-    re.compile(r"埋もれてる"),
-    re.compile(r"なんで.*?の\?"),
-    re.compile(r"どういうプロセスで"),
-    re.compile(r"どういうこと\?"),
-    re.compile(r"私が間違って"),
-    re.compile(r"本当に\?"),
-    re.compile(r"次から"),
-    re.compile(r"今後は"),
-    re.compile(r"再発防止"),
-    re.compile(r"自己改善"),
-    re.compile(r"分析して.*?修正"),
-    re.compile(r"でしょ\?"),
-    re.compile(r"んでしょ\?"),
-    re.compile(r"じゃない\?"),
-    re.compile(r"じゃないの\?"),
-    re.compile(r"じゃないか\?"),
-    re.compile(r"べきじゃない"),
-    re.compile(r"だよね\?"),
-    re.compile(r"必要無い"),
-    re.compile(r"不要でしょ"),
-    re.compile(r"手間かかる"),
-)
-
-# Third-party-negation exclusion patterns. Added after an observed false
-# positive: user said "なるほど。ありがとう。claudeがないとだめなんだね"
-# — an acceptance message describing pipeline architecture, not a Claude
-# critique. The bare "だめ" matched but the meaning was structural-state
-# of a third-party object (the pipeline), not Claude's behavior.
-# See: feedback_correction_signal_third_party_negation.md
-_THIRD_PARTY_NEGATION_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"がないと(?:だめ|ダメ)"),    # 「X がないとだめ」structural-constraint
-    re.compile(r"無いと(?:だめ|ダメ)"),
-    re.compile(r"だと(?:だめ|ダメ)"),         # 「X だとだめ」
-    re.compile(r"じゃ(?:だめ|ダメ)"),         # 「X じゃだめ」
-)
-
-# Acceptance-prefix patterns. If the prompt opens with one of these AND
-# does not contain an explicit improvement-request marker, suppress.
-_ACCEPTANCE_PREFIX_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"^\s*なるほど"),
-    re.compile(r"^\s*ありがとう"),
-    re.compile(r"^\s*了解"),
-    re.compile(r"^\s*わかった"),
-    re.compile(r"^\s*わかりました"),
-    re.compile(r"^\s*把握"),
-)
-
-# Explicit improvement-request markers. When present, acceptance-prefix
-# override is bypassed (user explicitly asks for follow-up reflection).
-_EXPLICIT_IMPROVEMENT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"次から"),
-    re.compile(r"今後は"),
-    re.compile(r"再発防止"),
-    re.compile(r"自己改善"),
-    re.compile(r"分析して.*?修正"),
-)
+# Pattern vocabulary — calibration constants, NOT mechanism. The four groups
+# (correction phrases / third-party-negation exclusions / acceptance prefixes /
+# explicit improvement markers) encode how one specific user phrases
+# corrections, with the third-party-negation set born from an observed origin-
+# environment false positive ("claudeがないとだめなんだね" — structural-state
+# description, not a Claude critique; see
+# feedback_correction_signal_third_party_negation.md). They load via
+# _signals.py: conservative English defaults, overridden per-key by the
+# local-layer config .claude/hooks/local/signals.json (the origin-environment
+# Japanese pack ships as signals.json.example). The detection RULES that
+# combine these groups (_has_correction_signal below) stay hardcoded here.
+sys.path.insert(0, str(Path(__file__).parent))
+try:
+    from _signals import correction_pattern_sets  # noqa: E402
+    _PATTERN_SETS = correction_pattern_sets()
+except Exception as _sig_exc:  # config layer must never kill the hook
+    sys.stderr.write(f"[detect_correction_signal_v2] _signals fallback: {_sig_exc}\n")
+    _PATTERN_SETS = {
+        "patterns": (), "third_party_negation": (),
+        "acceptance_prefix": (), "explicit_improvement": (),
+    }
+_CORRECTION_PATTERNS: tuple[re.Pattern[str], ...] = _PATTERN_SETS["patterns"]
+_THIRD_PARTY_NEGATION_PATTERNS: tuple[re.Pattern[str], ...] = _PATTERN_SETS["third_party_negation"]
+_ACCEPTANCE_PREFIX_PATTERNS: tuple[re.Pattern[str], ...] = _PATTERN_SETS["acceptance_prefix"]
+_EXPLICIT_IMPROVEMENT_PATTERNS: tuple[re.Pattern[str], ...] = _PATTERN_SETS["explicit_improvement"]
 
 # Anti-spam: don't trigger reflection twice within this many seconds.
 # Per-SESSION debounce — see _debounce_file() / _check_and_set_debounce() below.

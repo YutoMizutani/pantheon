@@ -52,6 +52,8 @@ def _fired(transcript: str, sid: str, prompt: str = "ok") -> bool:
     env = dict(os.environ)
     # Hermetic: a non-empty real correction queue would bypass the gate.
     env["CLAUDE_CORRECTION_QUEUE"] = f"/tmp/test_gate_empty_queue_{os.getpid()}.json"
+    # Hermetic against the user's local vocabulary: pin the tracked example pack.
+    env["FRAME_SIGNALS_FILE"] = str(HOOK.parent / "local" / "signals.json.example")
     proc = subprocess.run(
         [sys.executable, str(HOOK)],
         input=json.dumps({"prompt": prompt, "transcript_path": transcript, "session_id": sid}),

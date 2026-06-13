@@ -55,6 +55,10 @@ def _write_transcript(lines: list[str]) -> str:
 def _run_hook(hook: Path, payload: dict, queue_path: str) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["CLAUDE_CORRECTION_QUEUE"] = queue_path
+    # Vocabulary is config now (_signals.py). Pin the tracked JA example pack so
+    # the JA prompts below match in a fresh clone (no local/signals.json) and
+    # the example file itself stays continuously verified.
+    env["FRAME_SIGNALS_FILE"] = str(HOOKS_DIR / "local" / "signals.json.example")
     return subprocess.run(
         [sys.executable, str(hook)],
         input=json.dumps(payload),

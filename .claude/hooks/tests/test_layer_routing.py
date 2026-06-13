@@ -8,9 +8,12 @@
      (フレーム層 — ルーティングと機構の説明のみ) ではなく CLAUDE.local.md。
   2. propose_claudemd_updates: queue entry 用に target → layer を導出できる
      (_layer_for_target)。
-  3. detect_acceptance_signal の reflection prompt: 昇格 target 候補が二層対応
-     (CLAUDE.local.md / .claude/rules/common/) で root CLAUDE.md を offer せず、
-     hook 起案にも層判定 (.claude/hooks/local/ + settings.local.json) を指示する。
+  3. 二層昇格ポリシー (昇格 target 候補が CLAUDE.local.md / .claude/rules/common/
+     で root CLAUDE.md を offer せず、hook 起案に層判定 .claude/hooks/local/ +
+     settings.local.json を指示する) の単一オーナーは self-reflection エージェント
+     定義。reflection policy refactor (2026-06) でこのテキストは hook の reminder
+     から .claude/agents/self-reflection.md へ移転済み — 本テストは「policy は
+     agent 定義に在り、hook はそこへ委譲する」を固定する (single owner per path)。
   4. telemetry_report: 棚卸しの enumeration が .claude/hooks/local/*.py も拾う
      (local 層 hook が cold-hook 監査から漏れない)。
 """
@@ -18,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import os
 import re
 import sys
 import tempfile
@@ -29,6 +33,10 @@ REPO = HOOKS.parent.parent
 
 # hook 本体は hooks dir が sys.path に載った状態で実行される前提 (_paths import)
 sys.path.insert(0, str(HOOKS))
+# _paths.PROJECT_DIR は CLAUDE_PROJECT_DIR 未設定時 os.getcwd() に落ちる。
+# それに依存する _resolve_target / _layer_for_target を cwd 非依存で検証するため、
+# モジュール load (= _paths import) より前に repo root を pin する。
+os.environ.setdefault("CLAUDE_PROJECT_DIR", str(REPO))
 
 
 def _load(name: str, path: Path):
@@ -74,19 +82,28 @@ def main() -> int:
             propose._layer_for_target(REPO / ".claude/rules/common/foo.md") == "frame",
         )
 
-    # --- 3. reflection prompt の二層対応 ---
+    # --- 3. 二層昇格ポリシーの単一オーナー = self-reflection エージェント定義 ---
+    # refactor で reminder からポリシー本文が抜かれたので、本文は agent 定義側で固定し、
+    # hook 側は「その定義へ委譲している」ことだけ固定する (single owner per path)。
+    agent_def = (REPO / ".claude/agents/self-reflection.md").read_text(encoding="utf-8")
+    check("agent_def_offers_claude_local", "CLAUDE.local.md" in agent_def)
+    check("agent_def_offers_rules_common", ".claude/rules/common/" in agent_def)
+    check("agent_def_requires_layer_field", '"layer"' in agent_def)
+    check("agent_def_routes_local_hooks", ".claude/hooks/local/" in agent_def)
+    check(
+        "agent_def_local_hooks_register_in_settings_local",
+        "settings.local.json" in agent_def,
+    )
+
+    # hook 側はポリシーを inline せず agent 定義へ委譲する (reminder と corrections_block の両方)。
     r = accept._REMINDER
-    check("reminder_offers_claude_local", "CLAUDE.local.md" in r)
-    check("reminder_offers_rules_common", ".claude/rules/common/" in r)
+    check("reminder_delegates_to_agent_def", "self-reflection" in r)
     check("reminder_drops_root_claudemd_target", "ルートの `CLAUDE.md` または" not in r)
-    check("reminder_requires_layer_field", "`layer`" in r)
-    check("reminder_routes_local_hooks", ".claude/hooks/local/" in r)
-    check("reminder_local_hooks_register_in_settings_local", "settings.local.json" in r)
 
     blk = accept._corrections_block(
         [{"ts": "t", "session_id": "s", "transcript_path": "p", "prompt_excerpt": "x"}]
     )
-    check("corrections_block_mentions_layer", "層判定" in blk)
+    check("corrections_block_delegates_to_agent_def", "self-reflection.md" in blk)
 
     # --- 4. telemetry_report が local/ 配下も列挙する ---
     telem = _load("telemetry_report", REPO / "heaven/tools/telemetry_report.py")

@@ -16,13 +16,18 @@ end-state arrived. Mining those moments is the only way to catch the
 
 Trigger = EXACT full-string match (NOT substring). The entire user prompt,
 after trimming whitespace and stripping an optional leading routing prefix
-(FRAME_ROUTING_PREFIX env var), must equal exactly one of
-``{ok, 完了, ありがとう, できた}`` ("ok" matched case-insensitively). This is the
-property that lets the hook run enforcing without an observe-mode burn-in: a
-full-string match cannot be a status question ("完了？" ≠ "完了"), cannot be
-casual embedded usage ("ok、次やって"), and cannot be an incidental quote — the
-three false-positive classes that, in the origin environment, got an earlier
-substring-matching blocker hook disabled within a day of being added.
+(FRAME_ROUTING_PREFIX env var), must equal one of the acceptance words. This
+is the property that lets the hook run enforcing without an observe-mode
+burn-in: a full-string match cannot be a status question ("完了？" ≠ "完了"),
+cannot be casual embedded usage ("ok、次やって"), and cannot be an incidental
+quote — the three false-positive classes that, in the origin environment, got
+an earlier substring-matching blocker hook disabled within a day of being added.
+
+The MECHANISM (exact match) is frame-layer and hardcoded here. The VOCABULARY
+(which words count as acceptance) is a per-user calibration constant and comes
+from ``_signals.py``: conservative built-in defaults ({ok, done, thanks},
+case-insensitive), overridden by the local-layer config
+``.claude/hooks/local/signals.json`` (gitignored; see signals.json.example).
 
 Memory rules referenced:
   - ``feedback_classify_failure_saying_vs_judgement.md``
@@ -62,12 +67,20 @@ except Exception:  # telemetry is best-effort; never break the hook
 
 # Exact-match acceptance whitelist. The ENTIRE prompt (after normalization)
 # must equal one of these — substring matches are deliberately NOT accepted.
-# Restricting to this small set + full-string match is what eliminates the
+# Restricting to a small set + full-string match is what eliminates the
 # false-positive classes (status questions, casual embedded usage, incidental
-# quotes) so the hook can run enforcing. "ok" is matched case-insensitively;
-# the Japanese markers are matched verbatim.
-_ACCEPTANCE_EXACT_JA: frozenset[str] = frozenset({"完了", "ありがとう", "できた"})
-_ACCEPTANCE_EXACT_ASCII: frozenset[str] = frozenset({"ok"})  # case-insensitive
+# quotes) so the hook can run enforcing. The word lists are a calibration
+# constant loaded via _signals.py (local/signals.json overriding conservative
+# defaults); only the matching mechanism is fixed here.
+try:
+    from _signals import acceptance_sets  # noqa: E402
+    _ACCEPTANCE_EXACT, _ACCEPTANCE_EXACT_CI = acceptance_sets()
+except Exception as _sig_exc:  # config layer must never kill the hook
+    sys.stderr.write(f"[detect_acceptance_signal] _signals fallback: {_sig_exc}\n")
+    # Empty = opt-in: with no vocabulary the hook simply never fires (the safe
+    # direction — a missed reflection is cheap; a false background spawn is not).
+    _ACCEPTANCE_EXACT = frozenset()
+    _ACCEPTANCE_EXACT_CI = frozenset()
 # 中継 transport (例: chat bridge) が付与する routing prefix。
 # FRAME_ROUTING_PREFIX 環境変数で指定 (例: "[From Discord]")。
 # 未設定時は空文字 = strip 処理が no-op になる。
@@ -360,7 +373,7 @@ def _has_acceptance_signal(prompt: str) -> bool:
     body = _normalize_prompt(prompt)
     if not body:
         return False
-    return body in _ACCEPTANCE_EXACT_JA or body.lower() in _ACCEPTANCE_EXACT_ASCII
+    return body in _ACCEPTANCE_EXACT or body.lower() in _ACCEPTANCE_EXACT_CI
 
 
 def _previous_turn_was_assistant(transcript_path: str) -> bool:

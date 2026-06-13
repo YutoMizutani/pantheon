@@ -56,7 +56,8 @@
 2. slug を導出し、`~/.claude/projects/<slug>/memory` の現状を `ls -ld` で検査する
 3. 実ディレクトリとして既存 memory がある場合は、中身を `heaven/memory/` へ移してから置き換える（上書き・破棄をしない。既存の `MEMORY.md` index がある場合はそれを正とする）。既存 memory が無く `heaven/memory/MEMORY.md` も無い場合は、`# Memory Index` 見出しと「1 memory = 1 ファイル、index には 1 行ポインタのみ（形式: `- [タイトル](ファイル名.md) — 要点 1 行`）」の規約コメントだけを持つ最小 index を生成して seed にする
 4. `ln -s "<このリポジトリの絶対パス>/heaven/memory" ~/.claude/projects/<slug>/memory` を張る
-5. symlink の解決先と両側のファイル件数一致を verify し、結果を 1 行で報告する
+5. `.claude/hooks/local/signals.json` が無ければ作る（自己改善ループの acceptance/correction 検出の語彙 — 完全 opt-in なので、これが無いと「完了」「訂正」シグナルで一切発火しない）。ユーザーに「タスク完了をどう言うか（例: ok / 完了 / done）」「Claude を訂正するときの言い回し」を**聞き取って**埋めるのが既定。手早く済ませたいなら `.claude/hooks/local/signals.json.example`（原環境較正済みの日本語パック）をコピーして出発点にしてよい。スキーマと較正手順は [docs/self-improvement-loop.md](docs/self-improvement-loop.md)「シグナル語彙の較正」。ローカル層 — commit しない
+6. symlink の解決先と両側のファイル件数一致、および `signals.json` の有無を verify し、結果を 1 行で報告する
 
 ---
 

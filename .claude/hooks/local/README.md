@@ -1,6 +1,6 @@
 # hooks/local — ローカル層 hook の置き場
 
-ここは **ローカル層**（gitignore 済み — この README だけがフレーム層として track される）。
+ここは **ローカル層**（gitignore 済み — この README と `signals.json.example` だけがフレーム層として track される）。
 ユーザー固有の語彙・固有名詞・個人の運用前提を encode した hook はここに置く。
 どの環境でも成立する汎用機構の hook は 1 つ上の `.claude/hooks/`（フレーム層 — commit 候補）。
 
@@ -10,6 +10,11 @@
   `settings.local.json` 向けに queue する。迷ったら local（誤 frame は
   ユーザー固有内容を commit 候補にしてしまう — 逆の害は小さい）。
 - **frame（親 dir）**: 環境非依存の汎用機構。settings 登録は `settings.json` 向け。
+
+hook 本体だけでなく**語彙設定**もここに置く: `signals.json`（acceptance / correction
+シグナルのユーザー語彙 — gitignore 済み）。スキーマとマージ規則は `../_signals.py`、
+サンプルは同 dir の `signals.json.example`、較正手順は
+`docs/self-improvement-loop.md`「シグナル語彙の較正」節。
 
 実装ノート:
 

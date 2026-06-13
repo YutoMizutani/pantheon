@@ -35,6 +35,9 @@
 # 層判定 local とした hook はここに置かれ、構造的に commit 候補へ現れない。
 /.claude/hooks/local/*
 !/.claude/hooks/local/README.md
+# シグナル語彙のサンプル (原環境較正済みパック) はフレーム層として配布する。
+# 実体 signals.json はユーザー較正値なのでローカル層のまま。
+!/.claude/hooks/local/signals.json.example
 
 # --- heaven/: エージェントの自由領域はローカルが既定。出荷する計器だけ frame ---
 /heaven/*
