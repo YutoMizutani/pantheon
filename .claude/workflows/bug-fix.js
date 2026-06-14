@@ -1,5 +1,5 @@
 /**
- * bug-fix workflow — ~/Developer/llm/ 配下のバグ報告を RED-first フローで閉じる.
+ * bug-fix workflow — この repo 配下のバグ報告を RED-first フローで閉じる.
  *
  * ==== 設計層 (4 要素) ====
  *   - タスク洗い出し : Reproduce / Analyze / Fix / Verify を独立 subagent に分解
@@ -46,9 +46,9 @@
 export const meta = {
   name: 'bug-fix',
   description:
-    '~/Developer/llm/ 配下のバグ報告を Reproduce → Analyze → Fix → Verify の直列フローで閉じる. 各フェーズが schema 付き artifact を返し、RED 観測なしに Fix に進まない',
+    'この repo 配下のバグ報告を Reproduce → Analyze → Fix → Verify の直列フローで閉じる. 各フェーズが schema 付き artifact を返し、RED 観測なしに Fix に進まない',
   whenToUse:
-    'ユーザーから ~/Developer/llm/ 配下の bug 報告/修正依頼を受けたとき. feature 追加 / typo / doc-only には使わない (block_red_first_violation.py の発火範囲と同じ). args は JSON object {report (必須), repro_hint?, scope_paths?, user_ok_marker?} 推奨 — bare string も report として受理',
+    'ユーザーからこの repo 配下の bug 報告/修正依頼を受けたとき. feature 追加 / typo / doc-only には使わない (block_red_first_violation.py の発火範囲と同じ). args は JSON object {report (必須), repro_hint?, scope_paths?, user_ok_marker?} 推奨 — bare string も report として受理',
   phases: [
     { title: 'Reproduce', detail: '再現コマンドを走らせ RED を観測 (編集不可)' },
     { title: 'Analyze', detail: '読み取り専用で根本原因と修正範囲を特定' },
