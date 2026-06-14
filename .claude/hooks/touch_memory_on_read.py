@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: stamp `last_reinforced` on memory files Claude reads.
+"""PreToolUse hook: stamp `last_reinforced` on memory files Claude reads.
 
-Wired into PostToolUse on Read. When Claude opens a memory file (via
+Wired into PreToolUse on Read. When Claude opens a memory file (via
 `[[name]]` resolution, manual lookup, or any other path), this hook
 records the reinforcement timestamp on the file. Together with hook
 fire telemetry, the aggregator can later flag rules with zero reads +
 zero fires in N months as archival candidates.
+
+Stamping BEFORE the Read (rather than after) is deliberate: a PostToolUse
+stamp mutated the file immediately after Claude's Read snapshot, so the
+next same-day Edit failed with "File has been modified since read". Doing
+it in PreToolUse means the snapshot already contains today's stamp; same-day
+re-stamps are no-ops, so the archival telemetry is preserved unchanged. Reads
+only `tool_name` + `tool_input.file_path`, both present at PreToolUse time.
 
 Best-effort: this hook never blocks the tool. Exceptions are swallowed.
 """
