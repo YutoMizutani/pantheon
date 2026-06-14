@@ -61,7 +61,7 @@ export const meta = {
   description:
     'プロジェクトを破壊せず価値を底上げする改善案(新機能/UX摩擦除去/統合)を実使用シグナルに根ざして生成する. quota で grounding 勾配を反転し test-coverage/重箱への崩落を構造で防ぐ',
   whenToUse:
-    '~/Developer/llm/ 配下の特定 project を「便利にする」改善案が欲しいとき, または /loop で定期的に改善候補を出させたいとき. bug 修正は bug-fix workflow, 外部事実調査は web-research を使う',
+    'この repo 配下の特定 project を「便利にする」改善案が欲しいとき, または /loop で定期的に改善候補を出させたいとき. bug 修正は bug-fix workflow, 外部事実調査は web-research を使う',
   phases: [
     { title: 'Gather', detail: '対象 project の実使用シグナルを deterministic に query (案は出さない)' },
     { title: 'Diverge', detail: 'lens(改善タイプ)ごとに fan-out. quota は高価値 weak-grounded を過剰代表, perf 除外' },
