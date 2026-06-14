@@ -25,13 +25,20 @@ argument-hint: "(引数なし。repo 全体を対象にする)"
 
 ### 1. revealed preference 信号を集める (deterministic・cheap)
 
-user 定義の対応 (memory SSoT) を proxy で測る:
-- **興味の度合い** ← 内容の充実度 + 更新頻度。`~/.claude/runtime/stall_ledger.json` (stall_detector が per-unit の最終編集を保持) + 直近 30/90 日の Edit/Write 頻度。
-- **キャパ / 趣味の数** ← 同時編集している unit 数 (直近窓で動いている unit のクラスタ)。
-- **メタ理解度** ← 内容の精緻度 + 調査の深度 (reference/ の量, research notes 数, doc 行数, datamine の有無)。
-- **新しさ / 軌跡** ← unit の誕生時期と熱の推移 (最近生まれて加速 = 新しい attractor / 昔から高頻度 = 中核 / 冷えつつある = 関心の移動)。
+**粒度 = CLAUDE.md を持つ最近接 unit (project でなく sub-project) が canonical。**
+`find projects -name CLAUDE.md` で unit 一覧を作り、各 unit に下記信号を重ねる。
+`~/.claude/runtime/stall_ledger.json` は **recency 源**として該当 unit に重ねる
+(ledger に無い unit は recency 不明 → 深さ/誕生で判断。ledger と unit 一覧が不一致でも unit 一覧を正とする)。
 
-粒度は CLAUDE.md を持つ最近接 unit (project でなく sub-project; stall_detector と同じ単位)。
+user 定義の対応 (memory SSoT) を proxy で測る:
+- **興味の度合い** ← (a) recency = stall_ledger の該当 unit `edit` timestamp (=最終編集時刻。**頻度でなく時刻**)。
+  (b) 頻度が要るなら該当 unit パスを含む jsonl の Edit/Write 件数を直近30日で数える。重ければ cheap 優先で
+  recency + 深さで代替してよい (ledger は最終時刻しか持たない、が既知の制約)。
+- **キャパ / 趣味の数** ← 直近窓 (例: 7日) で動いている unit 数のクラスタ。
+- **メタ理解度** ← 調査の深度。reference/ 行数・md 数・research notes 数・datamine/apps の有無
+  (集計法は任意、unit 間で相対比較できればよい)。
+- **新しさ / 軌跡** ← unit の誕生 (最古ファイル mtime) と熱の推移
+  (最近生まれて加速 = 新 attractor / 昔から熱い = 中核 / 冷えつつある = 関心の移動)。
 
 ### 2. 自画像として読む — 組織原理を1つ名指す
 
@@ -45,6 +52,10 @@ user 定義の対応 (memory SSoT) を proxy で測る:
 - **場面**: user が「それ欲しい」と認識する具体シーン (抽象でなく、user の生活/作業の1場面)。
 - **なぜ軌跡から**: どの信号 (どの unit の熱/深さ/誕生) がこれを示唆するか。
 - **確度**: 「資産・挙動の実在 (高めが多い)」と「接続で価値が出る仮説 (中が多い)」を分けて書く。
+
+bet は単一 unit の軌跡発でもよい (横断必須ではない) が、**repo 全体を自画像として読んだ上での「新規ビルド」**であること
+— 既存 unit の小改善や、既存資産を %削減目的で配線するだけのものは崩落モード。既存資産の汎化/橋渡しでも、
+新しい挙動・出口を生むなら可 (%削減を価値として語らないこと)。
 
 ### 4. 推しを1つ + 自己批判
 
