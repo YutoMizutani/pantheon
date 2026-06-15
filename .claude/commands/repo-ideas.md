@@ -7,12 +7,12 @@ argument-hint: "(引数なし。repo 全体を対象にする)"
 > 信頼する前に `empirical-prompt-tuning` で標準実行者に回し、conviction-bet を再現するか / asset-wiring へ
 > 崩落しないかを確認する。SSoT は memory [[feedback_value_discovery_read_repo_as_revealed_preference]]。
 
-# repo-compass — 「次に何を新しく作るか」を repo の自画像から導く
+# repo-ideas — 「次に何を新しく作るか」を repo の自画像から導く
 
 ## これは何で、何でないか
 
 - **これ**: この repo (root) 全体を user が作ってきたもの = revealed preference (言語化より忠実な世界観の現れ) として読み、**欲望の軌跡が次に示唆する新規ビルド**を出す。
-- **これでない**: feature-loop (= per-project の「破壊せず便利にする」改善案)。repo-compass は per-project の改善でなく、**横断で「次に何を新しく作るか」**。両者は別レイヤ。
+- **これでない**: feature-loop (= per-project の「破壊せず便利にする」改善案)。repo-ideas は per-project の改善でなく、**横断で「次に何を新しく作るか」**。両者は別レイヤ。
 
 ## 絶対に避ける崩落モード (このセッションで実際に全滅した出し方)
 
