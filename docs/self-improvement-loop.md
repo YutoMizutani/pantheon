@@ -55,6 +55,18 @@ memory の参照も記録 ── touch_memory_on_read.py → telemetry/memory_to
 - **detect_acceptance_signal.py** — 「ok / 完了」等の**完全一致**でのみ発火し、META reflection を起動する（どの語が acceptance かは較正値 — 下記「シグナル語彙の較正」）。訂正シグナルだけでは「ユーザーがわざわざ指摘した失敗」しか学べない、という非対称への手当て。完全一致トリガなので observe モード不要で運用できる。**責務はシグナル検出と起動のみ** — 振り返りの方針（一次レンズ・採掘 category・ワークフロー・layer 判定）は `.claude/agents/self-reflection.md`（frame 層エージェント定義）に分離してあり、hook は session_id / transcript / 訂正キューの**動的入力だけ**を渡して spawn する。エージェントは各セッションを**まず危害・不可逆性レンズでゲートし**（バックアップの無い user データの破壊・外部への不可逆作用があれば対話・効率より優先し、踏んだ正確なコマンドを gate=hook 等に食わせて block を実テスト確認する）、次に**『user と Claude の対話』として一次レンズで読み**（user の framing に Claude が収束したか乖離したか／同趣旨の言い直し・差し戻しの反復）、最後に効率・プロセスの採掘 category（冗長手順・避けられた往復・遅すぎた診断 等）を**三次軸**として回す。順序は固定（危害・不可逆性 → 対話 → 効率）。重心を危害と対話理解に置くのは、効率採掘へ偏った reflection が「不可逆な破壊」や「user が正しく言い続けたのに自説で動き続けた」型の最重要失敗を構造的に取りこぼしたため。なお prompt 自体に根がある fault（reflection 自身の優先順位を含む）は memory でなく **agent 定義の昇格**（`~/.claude/runtime/pending_agent_def_updates.json` queue・強化方向のみ・人間レビュー後に適用）で直す。
 - **propose_claudemd_updates.py** — Stop 時に「このプロジェクトに固有の規範化候補」を更新案として `~/.claude/runtime/pending_claudemd_updates.json` に queue する（user が一括レビュー）。target は二層構成に従う: project 配下なら `projects/<X>/CLAUDE.md`、それ以外は `CLAUDE.local.md`（ルート CLAUDE.md はルーティング+機構のみで対象外）。各 entry は target から導出した `layer`（local/frame）を持つ。
 
+## 反省/監査の三系統と escalation 弁（加算だけにしない）
+
+self-improvement は放っておくと「失敗 → memory を 1 枚足す」と**加算**に偏る。これを是正する 3 系統が責務を分けて働く:
+
+- **self-reflection**（per-session・加算）— 1 セッションから学びを memory/hook に落とす。subject 固定。
+- **rule-auditor**（cross-corpus・**使用量 GC**・量的）— 0 発火 hook / 未読 memory / queue 滞留を列挙し deprecation 候補。「何が死んでるか」。
+- **root-cause-auditor**（cross-corpus + cross-mechanism・**correctness 監査**・質的）— フック等実装 / memory 記載 / 機構設計の **誤り・band-aid・意図乖離** を検知し「**そもそも正しいか?**」を提起、根本修正を提案する（今回の global correction queue 退役+二層再設計が原型）。設計: [design-root-cause-auditor.md](design-root-cause-auditor.md)。判断のみ・自動改変ゼロ・human-gate。
+
+**escalation 弁**: self-reflection が「**既存 memory/hook がありながら同根 fault が再発**」を観測したら、memory N+1（band-aid の上塗り）でなく `~/.claude/runtime/pending_structural_reviews.json` に **root-cause-auditor 起動要求**を積む。「規範を増やす」から「構造がそもそも正しいか問う」へ上げる弁。要求は `heaven/tools/pending_queue_report.py` が滞留 surface し、user/parent が root-cause-auditor を起動する（sub-agent→sub-agent の直接 spawn 不可ゆえ queue 経由）。
+
+なぜ別 agent か: 質的 correctness 監査と量的 usage GC は altitude が違い、混ぜると責務が濁る。**乱立しているのは memory であって agent ではなく**、この agent の存在目的はむしろ band-aid memory の積層を構造修正へ畳むこと。限界: 「本当に必要だったもの」は intent gap（Tree Swing の教訓: 下流は need を復元できない）なので、agent は候補と前提の問いを surface するだけ・価値判断は user。
+
 ## 機構と産物 — 何が配線されていて、何がされていないか
 
 このフレームが配線して出荷するのは上記の**機構**（検出 / reflection / telemetry / memory 衛生 / 棚卸し）だけ。
