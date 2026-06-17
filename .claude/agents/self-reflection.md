@@ -87,11 +87,12 @@ transcript から user 発話を時系列に抜き出し、session を『user �
    - 直接 target を編集しない (自己改善ループが自分の最上位 prior を無審査で書き換える構図になる)。**必ず queue 経由**
    - **自己改変の安全不変条件 (agent-def 昇格に必須)**: 昇格は **強化方向のみ** — ガードの追加・優先順位の是正・lens の拡張は可。**ループ自身の安全ガードを緩める/撤去する提案は禁止**: propose-only / queue 経由 / 直接編集禁止の各ゲート、危害・不可逆性レンズ、および破壊・安全系 guardrail (該当 hook を含む) は loop の昇格対象から除外する。これらの変更・削除は人間が直接行う (HARD BLOCK / Self-Modification)。自身 (`self-reflection.md`) を target にする提案も queue に積むだけで、適用は人間レビュー後。
    - 昇格対象でない (今回の memory 1 件で十分) なら skip
+   - **構造レビューへのエスカレーション (再発が memory で止まらないとき)**: その fault が **既存 memory / enforce 済み hook がありながら再発**している場合 (シグナル: 同根 memory が既にあり本 session で N 枚目になる / `rule_adoption` redo-rate 高 / 同 cluster が複数 session 再発)、memory N+1 を書くのは band-aid の上塗りになりうる。このとき `~/.claude/runtime/pending_structural_reviews.json` に escalation 要求を 1 件 append し (無ければ `{"queued_at":"<ISO>","items":[]}` で新規。item: `{"ts":"<ISO>","trigger":"recurrence-despite-memory","target_hint":"<疑う機構/クラスタ>","signal":"<再発の根拠 1 行>","origin_session":"<sid>"}`)、**`root-cause-auditor` による構造監査を推奨**する。memory にも独立価値があれば書いてよいが、**「これは band-aid / 機構側が誤っている可能性」を escalation で必ず surface** する — 「規範を 1 枚増やす」より「構造がそもそも正しいか」へ上げる弁 (設計: docs/design-root-cause-auditor.md)。escalation を出したらサマリに `escalated: <target_hint / 理由>` の 1 行を足す。**escalation 要求の append だけが許可** — root-cause-auditor の起動・構造の改変は parent / user が別途行う (本 agent は要求を積むだけ)。
 6. どの層 (memory も CLAUDE.md も) でも一般化可能な候補が無ければ、`no-action: <一行の理由>` で終了する。トリガを正当化するために learning を捏造してはならない。
 
 ## 出力
 
-6 行サマリ — `adoption: <A adopted / U surfaced_unused logged>`、`wrote: <memory file or none>`、`wrote: <hook file or none>`、`queued (settings): <entry or none>`、`queued (CLAUDE.md): <entry or none>`、`queued (agent-def): <entry or none>` — または (メタ改善が見つからない場合) `adoption:` 行に続けて `no-action: ...` 1 行のみ。危害・不可逆性レンズが該当した場合は、サマリ先頭に `harm: <起きた不可逆作用 / gate 実テスト結果 / 重大度>` の 1 行を足す。行頭の英語ラベルはそのまま残し、`<...>` の中身を日本語で書く。task prompt に correction ブロックがあった場合は、サマリ先頭に `corrections: <処理 N 件 / no-action M 件>` の 1 行を足す。
+6 行サマリ — `adoption: <A adopted / U surfaced_unused logged>`、`wrote: <memory file or none>`、`wrote: <hook file or none>`、`queued (settings): <entry or none>`、`queued (CLAUDE.md): <entry or none>`、`queued (agent-def): <entry or none>` — または (メタ改善が見つからない場合) `adoption:` 行に続けて `no-action: ...` 1 行のみ。危害・不可逆性レンズが該当した場合は、サマリ先頭に `harm: <起きた不可逆作用 / gate 実テスト結果 / 重大度>` の 1 行を足す。行頭の英語ラベルはそのまま残し、`<...>` の中身を日本語で書く。task prompt に correction ブロックがあった場合は、サマリ先頭に `corrections: <処理 N 件 / no-action M 件>` の 1 行を足す。構造レビューへエスカレーションした場合 (再発が memory で止まらない) は `escalated: <target_hint / 理由>` の 1 行を足す。
 
 ## 制約
 

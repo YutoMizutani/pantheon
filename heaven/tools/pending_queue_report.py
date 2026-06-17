@@ -31,9 +31,10 @@ _SLUG = re.sub(r"[^A-Za-z0-9]", "-", str(REPO_ROOT))
 MEMORY_DIR = Path.home() / ".claude/projects" / _SLUG / "memory"
 
 QUEUES = [
-    ("hook",      "pending_hook_registrations.json",  "hook 登録"),
-    ("claudemd",  "pending_claudemd_updates.json",    "CLAUDE.md/rules 昇格"),
-    ("agent-def", "pending_agent_def_updates.json",   "agent 定義変更 (self-mod)"),
+    ("hook",       "pending_hook_registrations.json",  "hook 登録"),
+    ("claudemd",   "pending_claudemd_updates.json",    "CLAUDE.md/rules 昇格"),
+    ("agent-def",  "pending_agent_def_updates.json",   "agent 定義変更 (self-mod)"),
+    ("structural", "pending_structural_reviews.json",  "構造監査 (root-cause-auditor 起動要求)"),
 ]
 
 DEFAULT_STALE_DAYS = 1.0
