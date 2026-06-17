@@ -3,13 +3,13 @@
 
 Contract (frame/local split of the self-improvement signal hooks):
   - The matching MECHANISM ships in git; the VOCABULARY is config.
-  - FULLY OPT-IN: with no config file the defaults are EMPTY, so neither
-    acceptance nor correction ever fires (the frame layer holds no opinion on
-    vocabulary — "ok" itself is environment-dependent).
+  - FULLY OPT-IN: with no config file the defaults are EMPTY, so acceptance
+    never fires (the frame layer holds no opinion on vocabulary — "ok" itself
+    is environment-dependent).
   - local/signals.json (or FRAME_SIGNALS_FILE) overrides per LEAF key with
     REPLACE semantics: a defined key sets the list; undefined keys stay empty.
-  - Broken config (invalid JSON / invalid regex entries) degrades to
-    empty / skips the bad entry — never kills the hook.
+  - Broken config (invalid JSON) degrades to empty — never kills the hook.
+  - (correction detection was retired 2026-06-17; only acceptance vocab remains.)
   - The tracked signals.json.example (origin-environment JA pack) stays valid.
 """
 from __future__ import annotations
@@ -23,7 +23,6 @@ from pathlib import Path
 
 HOOKS_DIR = Path(__file__).resolve().parent.parent
 ACCEPTANCE_HOOK = HOOKS_DIR / "detect_acceptance_signal.py"
-CORRECTION_HOOK = HOOKS_DIR / "detect_correction_signal_v2.py"
 EXAMPLE_PACK = HOOKS_DIR / "local" / "signals.json.example"
 
 
@@ -62,8 +61,6 @@ def _run(hook: Path, prompt: str, transcript: str, sid: str,
          signals_file: str) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["FRAME_SIGNALS_FILE"] = signals_file
-    # Hermetic: keep the real correction queue out of acceptance-gate decisions.
-    env["CLAUDE_CORRECTION_QUEUE"] = f"/tmp/test_sigv_queue_{sid}.json"
     return subprocess.run(
         [sys.executable, str(hook)],
         input=json.dumps(
@@ -80,25 +77,6 @@ def _acceptance_fires(prompt: str, transcript: str, sid: str, signals_file: str)
     return "AUTO-LEARN-META" in _run(
         ACCEPTANCE_HOOK, prompt, transcript, sid, signals_file
     ).stdout
-
-
-def _correction_queued(prompt: str, transcript: str, sid: str, signals_file: str) -> bool:
-    qpath = f"/tmp/test_sigv_queue_{sid}.json"
-    try:
-        os.unlink(qpath)
-    except OSError:
-        pass
-    _run(CORRECTION_HOOK, prompt, transcript, sid, signals_file)
-    try:
-        items = json.loads(Path(qpath).read_text(encoding="utf-8")).get("items", [])
-    except (OSError, json.JSONDecodeError):
-        items = []
-    finally:
-        try:
-            os.unlink(qpath)
-        except OSError:
-            pass
-    return len(items) > 0
 
 
 def main() -> int:
@@ -133,15 +111,6 @@ def main() -> int:
         "optin_no_acceptance_ja",
         not _acceptance_fires("完了", transcript, f"sigv-{pid}-d3", missing),
     )
-    check(
-        "optin_no_correction_en",
-        not _correction_queued("that's wrong", transcript, f"sigv-{pid}-d4", missing),
-    )
-    check(
-        "optin_no_correction_ja",
-        not _correction_queued("それ違うでしょ", transcript, f"sigv-{pid}-d5", missing),
-    )
-
     # --- override: a defined leaf key activates that vocabulary ---
     custom_acc = _write_signals({"acceptance": {"exact": ["承認"]}})
     tmp_paths.append(custom_acc)
@@ -167,24 +136,6 @@ def main() -> int:
         "exact_ci is still full-string match, not substring",
     )
 
-    # --- correction override + invalid-regex resilience ---
-    custom_corr = _write_signals(
-        {"correction": {"patterns": ["([", "これは誤り"]}}
-    )
-    tmp_paths.append(custom_corr)
-    check(
-        "custom_correction_queues",
-        _correction_queued("これは誤りです", transcript, f"sigv-{pid}-c3", custom_corr),
-        "valid pattern must survive a sibling invalid regex",
-    )
-    check(
-        "custom_correction_replaces",
-        not _correction_queued(
-            "that's wrong", transcript, f"sigv-{pid}-c4", custom_corr
-        ),
-        "defining patterns must drop the English defaults",
-    )
-
     # --- broken config degrades to empty defaults (never crashes) ---
     garbage = _write_signals("{not json!!")
     tmp_paths.append(garbage)
@@ -199,20 +150,6 @@ def main() -> int:
     check(
         "example_pack_ja_acceptance",
         _acceptance_fires("完了", transcript, f"sigv-{pid}-e1", str(EXAMPLE_PACK)),
-    )
-    check(
-        "example_pack_ja_correction",
-        _correction_queued("それ違うでしょ", transcript, f"sigv-{pid}-e2", str(EXAMPLE_PACK)),
-    )
-    check(
-        "example_pack_third_party_negation",
-        not _correction_queued(
-            "なるほど。ありがとう。claudeがないとだめなんだね",
-            transcript,
-            f"sigv-{pid}-e3",
-            str(EXAMPLE_PACK),
-        ),
-        "origin FP case must stay suppressed",
     )
 
     for p in tmp_paths:

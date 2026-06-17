@@ -2,8 +2,8 @@
 """_signals — signal-vocabulary loader for the self-improvement hooks.
 
 層の分離 (なぜこのファイルがあるか):
-  acceptance / correction 検出の**機構**（全文一致・queue+batch-drain・debounce・
-  cost gate）は環境非依存でフレーム層 (git 同梱)。それに対し、機構が照合する
+  acceptance 検出の**機構**（全文一致・debounce・cost gate）は環境非依存で
+  フレーム層 (git 同梱)。それに対し、機構が照合する
   **語彙**は較正定数 — 「特定ユーザーが完了/訂正をどう言うか」を encode し、
   根拠はそのユーザーの transcript corpus にある。根拠が運べない定数を verbatim
   で配布しない、という規約に従い、語彙はローカル層に置く:
@@ -16,7 +16,7 @@
   ような語ですら意味は環境依存で (ある環境では reflection 予約語、別の環境では
   単なる承認「やっていいよ」)、デフォルト発火させると意味衝突と誤発火 (acceptance
   は背景サブエージェント spawn = costly) を生む。配布先は (a) 初回セットアップで
-  エージェントが「完了/訂正をどう言うか」を聞き取って signals.json を作る、または
+  エージェントが「完了をどう言うか」を聞き取って signals.json を作る、または
   (b) signals.json.example を local/signals.json にコピーする、で起動する。
   自環境語彙の作り方 (再導出手順) は docs/self-improvement-loop.md
   「シグナル語彙の較正」節。
@@ -26,12 +26,6 @@
     "acceptance": {
       "exact":    ["完了", ...],   // 全文一致 (verbatim・大文字小文字区別)
       "exact_ci": ["ok", ...]      // 全文一致 (case-insensitive)
-    },
-    "correction": {
-      "patterns": [...],             // 訂正シグナル regex
-      "third_party_negation": [...], // 「X がないとだめ」型の除外 regex
-      "acceptance_prefix": [...],    // 冒頭が受領なら抑制する regex
-      "explicit_improvement": [...]  // 受領抑制を貫通する明示改善要求 regex
     }
   }
 
@@ -41,9 +35,6 @@
 
 env override: FRAME_SIGNALS_FILE=<path> で読み込み先を差し替える
 (テストの hermetic 化用。FRAME_ROUTING_PREFIX と同系列の transport knob)。
-
-正規表現が invalid な entry は stderr 警告の上で skip する — hook は決して
-落とさない (落とすと検出系全体が silent に死ぬ)。
 """
 
 from __future__ import annotations
@@ -64,11 +55,12 @@ _DEFAULTS: dict = {
         "exact": [],
         "exact_ci": [],
     },
+    # correction 語彙 — inject_correction_nudge.py が消費する軽量 nudge 用
+    # (2026-06-17 二層化で復活。global queue は退役済 — docs/design-self-improvement-two-tier-intake.md)。
+    # 空デフォルト = opt-in (signals.json に correction block が無ければ nudge は発火しない)。
     "correction": {
         "patterns": [],
         "third_party_negation": [],
-        "acceptance_prefix": [],
-        "explicit_improvement": [],
     },
 }
 
@@ -117,16 +109,6 @@ def _merged() -> dict:
     return out
 
 
-def _compile(patterns: list[str], where: str) -> tuple[re.Pattern[str], ...]:
-    compiled: list[re.Pattern[str]] = []
-    for pat in patterns:
-        try:
-            compiled.append(re.compile(pat))
-        except re.error as exc:
-            sys.stderr.write(f"[_signals] skipping invalid regex in {where}: {pat!r} ({exc})\n")
-    return tuple(compiled)
-
-
 def acceptance_sets() -> tuple[frozenset[str], frozenset[str]]:
     """Return ``(exact, exact_ci)`` for detect_acceptance_signal.
     ``exact`` is matched verbatim; ``exact_ci`` entries are lowercased here and
@@ -138,11 +120,29 @@ def acceptance_sets() -> tuple[frozenset[str], frozenset[str]]:
     )
 
 
-def correction_pattern_sets() -> dict[str, tuple[re.Pattern[str], ...]]:
-    """Return the four compiled pattern groups for detect_correction_signal_v2."""
-    cor = _merged()["correction"]
+def correction_pattern_sets() -> dict:
+    """Return compiled correction-detection patterns for inject_correction_nudge.
+
+    Keys: ``patterns`` (critique phrases that signal the user is pointing out a
+    Claude failure) and ``third_party_negation`` (exclusion spans, e.g.
+    「Xがないとだめ」 = structural-state description, not a Claude critique).
+    Vocabulary is user calibration (signals.json ``correction`` block); the
+    empty default keeps detection opt-in. Topic/improvement words
+    (自己改善 / 次から / 今後は / 再発防止 / 分析して…修正) are intentionally NOT
+    correction triggers — including them self-fed the loop on meta-discussion
+    (INC-2026-06-17-01)."""
+    corr = _merged()["correction"]
+
+    def _compile(key: str) -> tuple[re.Pattern[str], ...]:
+        out = []
+        for p in corr.get(key, []):
+            try:
+                out.append(re.compile(p))
+            except re.error as exc:
+                sys.stderr.write(f"[_signals] correction.{key}: bad regex {p!r}: {exc}\n")
+        return tuple(out)
+
     return {
-        key: _compile(cor[key], f"correction.{key}")
-        for key in ("patterns", "third_party_negation", "acceptance_prefix",
-                    "explicit_improvement")
+        "patterns": _compile("patterns"),
+        "third_party_negation": _compile("third_party_negation"),
     }

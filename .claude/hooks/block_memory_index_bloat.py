@@ -2,8 +2,8 @@
 """block_memory_index_bloat — keep MEMORY.md index entries short (Recommendation #1).
 
 Source: meta-review of the ok-triggered self-improvement loop. The reflection
-sub-agents (detect_correction_signal_v2 / detect_acceptance_signal) write memory
-files AND append index lines to MEMORY.md with NO gate. The cumulative result
+sub-agent (spawned by detect_acceptance_signal) writes memory
+files AND appends index lines to MEMORY.md with NO gate. The cumulative result
 observed: MEMORY.md grew well past the harness auto-memory load limit (~24.4KB), so
 the auto-memory injection only partially loads it ("index entries are too long; only
 part was loaded") — the self-improvement loop's own reference base degrades.

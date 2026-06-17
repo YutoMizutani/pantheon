@@ -5,11 +5,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/detect_correction_signal_v2.py\""
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/detect_acceptance_signal.py\""
           },
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/detect_acceptance_signal.py\""
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/inject_correction_nudge.py\""
           }
         ]
       }

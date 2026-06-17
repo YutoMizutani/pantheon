@@ -5,12 +5,14 @@ Source reference:
   - Anthropic blog "How Claude Code works in large codebases" → "Use stop hooks
     to reflect on sessions and propose CLAUDE.md updates" (2026)
 
-Stop event hook. Differentiates from ``detect_correction_signal_v2.py``:
+Stop event hook. Differentiates from the acceptance reflection
+(``detect_acceptance_signal.py``):
 
-  * detect_correction_signal: UserPromptSubmit, on user correction → queues the
-    event for the batched reflection that detect_acceptance_signal dispatches
-    on the next exact acceptance signal (writes user-global memory under
-    ``~/.claude/projects/.../memory/``).
+  * detect_acceptance_signal: UserPromptSubmit, on an exact acceptance signal →
+    spawns a META reflection sub-agent that writes user-global memory under
+    ``~/.claude/projects/.../memory/``. (The former correction-signal intake
+    ``detect_correction_signal_v2.py`` + its global queue were retired
+    2026-06-17 — see docs/self-improvement-loop.md.)
   * propose_claudemd_updates (this hook): Stop, when user's prompt this turn
     contains a project-scoped or codify-explicit signal → queues a proposal to
     update the project's ``CLAUDE.md`` or ``.claude/rules/`` (NOT user memory).

@@ -3,16 +3,17 @@
 このフレームの価値は「ルーティング構造」ではなく、**エージェントが自分の失敗から規範を獲得し、効いていない規範を退役させる閉ループ**にある。構成要素と流れ:
 
 ```
-ユーザーの訂正発話
-  │  (UserPromptSubmit)
-  ▼
-detect_correction_signal_v2.py ── 訂正シグナルを検出し AUTO-LEARN reminder を注入
+ユーザー発話 (UserPromptSubmit) ── 二層 intake (相互排他)
   │
-  ▼
-親エージェントが background reflection subagent を spawn
-  │   transcript を読み、失敗を分類 (saying-fault / judgement-fault / hybrid)
-  │   → memory ファイルを書く (+ saying-fault なら hook を起案)
-  │   → hook の settings 登録は直接編集せず pending キューへ (人間が一括レビュー)
+  ├─ 訂正シグナル「違う/だめ/おかしい…」→ inject_correction_nudge.py
+  │     └─ main Claude へ <system-reminder> を注入し、in-context で自己診断・即修正を促すだけ
+  │        STATELESS — queue/spawn/memory なし。durable 化は下の acceptance を待つ
+  │
+  └─ acceptance「完了/ok」→ detect_acceptance_signal.py
+        └─ 親が background reflection subagent を spawn ＝唯一の memory 書き込みゲート
+              transcript を読み、失敗を分類 (saying-fault / judgement-fault / hybrid)
+              → memory ファイルを書く (+ saying-fault なら hook を起案)
+              → hook の settings 登録は直接編集せず pending キューへ (人間が一括レビュー)
   ▼
 規範が 3 層に定着
   │   CLAUDE.md (毎ターンの prior) / memory (長期記憶) / hook (決定論的 enforce)
@@ -30,6 +31,24 @@ memory の参照も記録 ── touch_memory_on_read.py → telemetry/memory_to
   ▼
 退役・統合 ── 効かない規範を削り、再発する規範は hook へ昇格
 ```
+
+> **2026-06-17 — correction intake の二層化（global queue 退役 → stateless nudge へ置換）**
+> 設計: [design-self-improvement-two-tier-intake.md](design-self-improvement-two-tier-intake.md) / [incidents/2026-06-17-correction-queue-cross-session-drift.md](incidents/2026-06-17-correction-queue-cross-session-drift.md)
+>
+> 旧 `detect_correction_signal_v2.py` + global correction queue を**退役**（`.claude/hooks/.archive/` 退避・
+> queue 空・`detect_acceptance_signal.py` の drain コード除去済・signals.json の旧 correction 語彙削除）。
+> 退役理由は 2 構造欠陥: (1) **cross-subject drift** — global queue が acceptance 時に全セッションの
+> 未処理 correction を一括 drain し、無関係セッションの reflection に混入（court_frames の振り返りが
+> 別セッション由来の maple 提案差し戻しを語った実例）。(2) **自己給餌** — detector が「自己改善」等
+> ループ自身の meta 議論にも発火し queue を補充し続けた。
+>
+> **置換 = 二層 intake**（上図）:
+> - **correction（負）= `inject_correction_nudge.py`**（frame・vocab は local/signals.json）— stateless 軽量 nudge。
+>   main Claude へ <system-reminder> を注入し in-context で自己診断・即修正を促すだけ。**queue/spawn/memory なし**。
+>   topic 語（自己改善 / 次から / 今後は / 再発防止 / 分析して…修正）は correction トリガから除外（self-feed の根）。
+> - **acceptance（正）= `detect_acceptance_signal.py`** — **唯一の memory 書き込みゲート**（存続。subject 分析は正常だった）。
+>
+> 効果: cross-session 概念が構造的に消滅し、誤検出コストは「1 行 nudge × 1 回」に限定（durable 化は明示 acceptance のみ）。
 
 補完する 2 系統（どちらも同梱・配線済み）:
 

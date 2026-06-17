@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """detect_acceptance_signal — auto-trigger META self-improvement on user acceptance.
 
-Counterpart to ``detect_correction_signal_v2.py``. That hook fires on negative
-signals (「違う」「だめ」「本当に？」) and extracts a *failure* to learn from.
-This hook fires on a positive *closure* signal and asks the sub-agent to
-extract a META improvement opportunity — what Claude could have done more
-efficiently, more directly, or with less back-and-forth, even though the
-user did not explicitly complain.
+This hook fires on a positive *closure* signal (user acceptance) and asks the
+sub-agent to extract a META improvement opportunity — what Claude could have
+done more efficiently, more directly, or with less back-and-forth, even though
+the user did not explicitly complain.
+
+(The former negative-signal counterpart ``detect_correction_signal_v2.py`` and
+its global correction queue were RETIRED 2026-06-17: the queue drained
+cross-subject corrections into unrelated reflections and the detector self-fed
+on meta-discussion. See docs/self-improvement-loop.md. Acceptance-triggered
+META reflection is now the sole self-improvement intake.)
 
 The asymmetry is the point: corrections cover only the failures the user
 bothers to point out. Many sessions wrap up with a polite "完了" hiding
@@ -39,15 +43,6 @@ Remaining guards (beyond exact match):
   - Require a prior assistant turn (something to reflect on).
   - 5 min debounce so repeated "ok" in one flow fires reflection once.
 
-Batched-queue redesign (原環境 user feedback「やりとり中の自己発火は過剰実装」):
-``detect_correction_signal_v2.py`` no longer spawns a reflection
-mid-conversation — it queues correction events into
-``~/.claude/runtime/pending_correction_reflections.json``. This hook drains
-that queue when it fires and hands ALL pending corrections to the single
-batched reflection sub-agent. A non-empty queue bypasses the cost gate
-(queued corrections are guaranteed mineable) but not the debounce; the queue
-is global, so corrections from sessions that never said "ok" are recovered by
-the next acceptance fire in any session.
 """
 
 from __future__ import annotations
@@ -136,92 +131,6 @@ _SYSTEM_USER_PREFIXES = (
     "<command-message>",
     "<command-name>",
 )
-
-# --- correction queue (fed by detect_correction_signal_v2) ------------------
-# Same env override as the producer so tests stay hermetic.
-_CORRECTION_QUEUE = Path(
-    os.environ.get(
-        "CLAUDE_CORRECTION_QUEUE",
-        str(Path.home() / ".claude/runtime/pending_correction_reflections.json"),
-    )
-)
-# Drained items are journaled here so a failed/killed reflection never loses
-# them silently (the queue file itself is emptied at dispatch time).
-_DISPATCH_LOG = _TELEMETRY_DIR / "correction_dispatch.jsonl"
-
-
-def _peek_corrections() -> list[dict]:
-    if not _CORRECTION_QUEUE.exists():
-        return []
-    try:
-        data = json.loads(_CORRECTION_QUEUE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-    items = data.get("items") if isinstance(data, dict) else None
-    if not isinstance(items, list):
-        return []
-    return [i for i in items if isinstance(i, dict)]
-
-
-def _drain_corrections(sid: str) -> list[dict]:
-    """Empty the queue and journal what was dispatched. Called only after all
-    fire guards (including debounce) have passed, so a gated turn never eats
-    the queue."""
-    items = _peek_corrections()
-    if not items:
-        return []
-    try:
-        _CORRECTION_QUEUE.write_text(
-            json.dumps({"items": []}, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
-    except OSError:
-        # If we cannot empty the queue, do not dispatch duplicates next time
-        # silently — still proceed; the reflection is idempotent enough
-        # (memory dedup happens in the sub-agent) and the journal records it.
-        pass
-    try:
-        _DISPATCH_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with _DISPATCH_LOG.open("a", encoding="utf-8") as f:
-            f.write(
-                json.dumps(
-                    {
-                        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                        "dispatched_by_session": sid,
-                        "count": len(items),
-                        "items": items,
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
-    except OSError:
-        pass
-    return items
-
-
-def _corrections_block(items: list[dict]) -> str:
-    """Render queued corrections as a reminder section, or '' when empty.
-
-    Dynamic data only (event list). The processing policy lives in the agent
-    definition (.claude/agents/self-reflection.md「correction 処理ワークフロー」節)
-    — single owner per path; do not inline policy text here."""
-    if not items:
-        return ""
-    lines = []
-    for i, it in enumerate(items, 1):
-        lines.append(
-            f"  {i}. ts={it.get('ts', '?')} session={it.get('session_id', '?')} "
-            f"transcript={it.get('transcript_path', '?')}\n"
-            f"     訂正発話 (抜粋):「{it.get('prompt_excerpt', '')}」"
-        )
-    joined = "\n".join(lines)
-    return f"""
-**処理待ち correction イベント ({len(items)} 件 — やりとり中はキューに積むだけにし、この acceptance 時点で一括処理する):**
-{joined}
-
-処理方針は agent 定義 (.claude/agents/self-reflection.md) の「correction 処理ワークフロー」節に従う — META mining より先に各イベントへ適用する。
-"""
-
 
 def _is_wakeup_or_system(text: str) -> bool:
     return text.lstrip().startswith(_SYSTEM_USER_PREFIXES)
@@ -339,7 +248,7 @@ After responding to the user's actual message in this turn, spawn a background s
 Inputs:
 - transcript_path: {transcript}
 - session_id: {sid}
-{corrections_block}
+- ↑ この transcript_path / session_id が META mining の **唯一の分析対象 (subject session)**。起動直後に subject session の先頭 user 発話を 1 度 Read し、テーマを自分に固定してから mining に入る。
 ---
 
 Spawn the background sub-agent in the same turn as your user-facing response.
@@ -482,13 +391,8 @@ def main() -> int:
 
     # Cost gate: skip the expensive reflection when too little mineable work was
     # done in the current window. Fails OPEN (fires) if features can't be read.
-    # A non-empty correction queue bypasses the gate — queued corrections are
-    # guaranteed mineable material regardless of this window's activity.
-    corrections = _peek_corrections()
     feat = _gate_features(transcript)
-    if corrections:
-        reason = f"corrections-queued n={len(corrections)}"
-    elif feat is not None:
+    if feat is not None:
         should_fire, reason = _gate_decision(feat)
         if not should_fire:
             _log_gate(sid, "skip", reason, feat)
@@ -500,7 +404,6 @@ def main() -> int:
         _log_gate(sid, "debounce", reason, feat)
         return 0
 
-    drained = _drain_corrections(sid) if corrections else []
     _log_gate(sid, "fire", reason, feat)
     record_fire("feedback_classify_failure_saying_vs_judgement", "audit",
                 context="acceptance-signal reflection")
@@ -508,7 +411,6 @@ def main() -> int:
         _REMINDER.format(
             transcript=transcript,
             sid=sid,
-            corrections_block=_corrections_block(drained),
         )
     )
     sys.stdout.write("\n")
