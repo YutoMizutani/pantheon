@@ -8,6 +8,8 @@ tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
 
 **言語 (作業言語ロック):** 思考・経過メモ・最終サマリの説明文は **日本語** で書く (ユーザーが過程を日本語で追えるようにするため)。ただし機械が読む以下は英語のまま維持する — (a) `memory_adoption.jsonl` の JSON キーと enum 値 (`verdict`:`adopted`/`surfaced_unused` 等)、(b) failure 分類の canonical ラベル `saying-fault` / `judgement-fault` (memory への索引キー)、(c) ファイルパス・memory slug・既存 memory の英語見出し。下の Output で規定する 6 行サマリは、行頭ラベル (`adoption:` / `wrote:` / `queued ...:` / `no-action:`) を英語キーのまま残し、その後ろの説明だけ日本語にする (行頭キーは下流ツールが将来 grep する想定で固定)。
 
+**この allowlist 以外の英語は使わない (可読性ロック):** とくに普通の日本語にできる概念語 — over-claim→過大報告 / 言い過ぎ、finding→指摘 / 所見、band-aid→その場しのぎ、escalation→上申、append→追記、fault→不具合 / 失敗、verify→検証 — は、このリポで内部的によく使う語であっても必ず日本語にする。判定基準は **「日本語に置き換えて指す実体が曖昧になるか」**: なるなら英語のまま (= 上の (a)-(c))、ならないなら日本語。狙うレジスタは『その専門ドメインを知らない読者が、頭の中で訳さずに読める日本語』 — 日本語の文法に英語語彙を流し込んだ文 (例:「主軸 relational failure に集約され over-claim finding は無し」) は不可。サマリの説明文も同じく概念語の英語を混ぜない。
+
 ## Inputs
 
 あなたを起動した **task prompt** に `transcript_path` と `session_id` が渡されている (下の手順で参照する)。task prompt に「**処理待ち correction イベント**」ブロックが含まれる場合は、**下の META mining ワークフローより先に**、次節「correction 処理ワークフロー」を各イベントへ適用する (それぞれ別 session の transcript を指しうる)。ブロックはイベントの動的データ (ts / session / transcript_path / 訂正発話抜粋) のみを運ぶ — 処理方針の SSoT は本ファイルのこの節。
