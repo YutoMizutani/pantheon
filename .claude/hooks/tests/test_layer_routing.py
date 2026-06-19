@@ -95,15 +95,14 @@ def main() -> int:
         "settings.local.json" in agent_def,
     )
 
-    # hook 側はポリシーを inline せず agent 定義へ委譲する (reminder と corrections_block の両方)。
+    # hook 側はポリシーを inline せず agent 定義へ委譲する (acceptance reminder)。
+    # 注: 旧 _corrections_block (global correction queue) は 29ccbf4 で廃止され、
+    # correction 処理は stateless な inject_correction_nudge.py へ移行した
+    # (agent def へは委譲せず in-context 自己診断を促すだけ)。その path のカバーは
+    # test_correction_nudge.py 側にあるので、ここでは acceptance reminder の委譲だけ固定する。
     r = accept._REMINDER
     check("reminder_delegates_to_agent_def", "self-reflection" in r)
     check("reminder_drops_root_claudemd_target", "ルートの `CLAUDE.md` または" not in r)
-
-    blk = accept._corrections_block(
-        [{"ts": "t", "session_id": "s", "transcript_path": "p", "prompt_excerpt": "x"}]
-    )
-    check("corrections_block_delegates_to_agent_def", "self-reflection.md" in blk)
 
     # --- 4. telemetry_report が local/ 配下も列挙する ---
     telem = _load("telemetry_report", REPO / "heaven/tools/telemetry_report.py")
