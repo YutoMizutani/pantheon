@@ -97,6 +97,7 @@ transcript から user 発話を時系列に抜き出し、session を『user �
      origin_session: <sid>
      ```
      memory にも独立価値があれば書いてよいが、**「これは band-aid / 機構側が誤っている可能性」を ESCALATION ブロックで必ず surface** する — 「規範を 1 枚増やす」より「構造がそもそも正しいか」へ上げる弁 (設計: docs/design-root-cause-auditor.md)。出したらサマリにも `escalated: <target_hint / 理由>` の 1 行を足す。**ESCALATION ブロックの出力だけが許可** — root-cause-auditor の起動・構造の改変は親 / user が別途行う (本 agent は escalation を返すだけ)。
+   - **配線状態 claim の verify 不変条件 (推測で状態を書かない)**: ESCALATION の `signal` 欄や memory 本文に「hook が配線済み/未配線」「fire=0 / fire=N」「queue 滞留」など **機構の状態を断定する前に、必ず実ファイルと telemetry で接地**する。手順: (a) 配線の有無は **`rg --no-ignore-vcs <hook名> .claude/settings*.json` か直接 Read** で確認する — `Grep` ツール / 素の `grep` は .gitignore を尊重し `settings.local.json` や `.claude/hooks/local/` に **silent に盲目**になるため、frame 層の `.claude/settings.json` だけを見て「未配線」と結論してはならない ([[feedback_grep_residual_refs_blind_to_gitignored_config]])。(b) fire 数は `~/.claude/projects/<slug>/telemetry/hook_fires.jsonl` を当該 rule_id で grep して実数を出す (「発火していない」を推測で書かない)。背景: 2026-06-19 にこの verify を欠いたまま「settings.local.json 不在 / fire=0」と escalation・memory に書いたが、実際は配線済み・6 fire ありで、gitignore-blindness の偽 gap を構造欠陥として上申してしまった ([[feedback_confirm_observation_before_asserting]])。
 6. どの層 (memory も CLAUDE.md も) でも一般化可能な候補が無ければ、`no-action: <一行の理由>` で終了する。トリガを正当化するために learning を捏造してはならない。
 
 ## 出力
