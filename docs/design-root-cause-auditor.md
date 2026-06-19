@@ -4,7 +4,7 @@
 |---|---|
 | 状態 | Proposed（2026-06-17）— 実装未着手 |
 | 仮称 | `root-cause-auditor`（user 命名可） |
-| 関連 | [self-improvement-loop.md](self-improvement-loop.md) / [design-self-improvement-two-tier-intake.md](design-self-improvement-two-tier-intake.md) / [incidents/2026-06-17-correction-queue-cross-session-drift.md](incidents/2026-06-17-correction-queue-cross-session-drift.md) |
+| 関連 | [self-improvement-loop.md](self-improvement-loop.md) / [design-self-improvement-two-tier-intake.md](design-self-improvement-two-tier-intake.md) |
 
 ## 1. 目的（最重要・取り違え注意）
 
@@ -30,7 +30,7 @@
 
 - **memory corpus**（内容を読む。usage でなく主張の正しさ・band-aid 性）
 - **mechanism マップ**: `.claude/hooks/*.py` / workflows / settings 配線 / 自己改善ループ自身の機構
-- **signals**（どこが怪しいかの当たり）: `rule_adoption` の redo-rate（enforce 済みなのに再発）・`hook_fires`・`memory_touches`・`docs/incidents/`・直近の「根治して」発話とその帰結
+- **signals**（どこが怪しいかの当たり）: `rule_adoption` の redo-rate（enforce 済みなのに再発）・`hook_fires`・`memory_touches`・`heaven/incidents/`・直近の「根治して」発話とその帰結
 - **設計意図の所在**: 各構造の docstring / design doc / それを生んだ memory・incident（＝「本来何をすべきだったか」の一次ソース）
 
 ## 4. 分析モード（出力する verdict）
@@ -52,9 +52,9 @@
 
 ### 設計層
 1. **タスク**: (a) スコープ確定（cluster / 特定 mechanism / 全 sweep） (b) signals 収集 (c) 各対象の意図 vs 実装の照合 (d) verdict 付け (e) 根本修正提案の起案
-2. **フロー**: signals → 怪しい対象を絞る → 各対象を意図ソースと突合 → verdict + 提案 → human-gate queue。barrier 無し（対象ごと独立）
-3. **成果物 I/O**: 入力 = scope（任意）+ signals。出力 = `pending_structural_reviews.json`（verdict + 根拠逐語 + 根本修正提案 + 影響範囲）。schema 固定
-4. **プロンプト設計**: 単一責務（correctness 監査）/ 禁止（自動改変・推測断定・user mental model の捏造）/ 出力契約（verdict enum + 逐語根拠必須 + 提案は queue へ）
+2. **フロー**: signals → 怪しい対象を絞る → 各対象を意図ソースと突合 → verdict + 提案 → parent へ返し human-gate。barrier 無し（対象ごと独立）
+3. **成果物 I/O**: 入力 = scope（任意）+ signals。出力 = **parent へ返す構造化レポート**（verdict + 根拠逐語 + 根本修正提案 + 影響範囲）。auditor は Write/Edit を持たず永続キューに書かない（2026-06-19〜）。採られた提案だけが parent 経由で self-mod 承認キューへ回る
+4. **プロンプト設計**: 単一責務（correctness 監査）/ 禁止（自動改変・推測断定・user mental model の捏造）/ 出力契約（verdict enum + 逐語根拠必須 + 提案は parent へ返す）
 
 ### 運用層（各要素に failure-it-prevents / observable-signal）
 1. **状態**: なし（毎回 corpus を実読。権威ソースは実ファイル・telemetry）
@@ -77,12 +77,12 @@
 
 1. **user 明示起動**（「構造おかしくない？整理して」「根治候補出して」「この hook 正しい？」）
 2. **self-reflection からの escalation**（核心）: per-session reflection が**再発シグナル**を観測したら（同根 memory が N 枚目 / enforce 済みなのに redo-rate 高 / 同 cluster が複数 session 再発）、memory を N+1 枚書く代わりに**構造レビューへ escalate**。
-   - 実装注: sub-agent → sub-agent の直接 spawn は harness 上不可 → 「self-reflection が escalation signal を queue（`pending_structural_reviews.json` に trigger 行）→ 親が `root-cause-auditor` を起動」。再発シグナルは既存 telemetry から計算可能
+   - 実装注: sub-agent → sub-agent の直接 spawn は harness 上不可 → 「self-reflection が escalation を **return-value（完了メッセージの `ESCALATION:` ブロック）で親へ返す** → 親が**同じ完了ターンで** `root-cause-auditor` を inline 起動（inline drain）」。再発シグナルは既存 telemetry から計算可能。**2026-06-19 変更**: 旧設計は永続キュー（`pending_structural_reviews.json`）+ morning-check surface + 手動起動だったが、親の自動 drain が未実装で 9 件滞留して機能せず → 永続キューを廃し inline drain へ。
 3. （任意）定期 sweep（rule-auditor と同 cadence に相乗りするか独立かは loop 所有権の明示判断）
 
 ## 7. 出力と限界（不変の歯止め）
 
-- 出力 = verdict + 逐語根拠 + **根本修正提案 ＋「この構造、あなたの思い描く姿と合ってる?」の問い** → human-gate queue。**自動改変・自動削除は一切しない**
+- 出力 = verdict + 逐語根拠 + **根本修正提案 ＋「この構造、あなたの思い描く姿と合ってる?」の問い** → parent へ返し human-gate（採られた提案だけ self-mod 承認キューへ）。**自動改変・自動削除は一切しない**
 - **限界（重要）**: 「本来作るべきだったもの / 本当に必要だったもの」は **intent gap**（Tree Swing の教訓: 下流は need を復元できない）。agent は **候補を差し出し・問いを早く立てる**だけで、最終判断は user。これがこの agent 自身が次の over-build にならない条件
 - 今回の学び（over-claim 禁止・最小 blast radius）を**この agent 自身に適用**: 「これは間違い」を実ファイル逐語根拠なしに断定しない・提案は最小可逆から
 
@@ -95,9 +95,9 @@
 ## 9. 実装手順（承認後）
 
 1. `.claude/agents/root-cause-auditor.md`（agent 定義・親 tier・propose-only/human-gate/HARD-BLOCK self-mod の不変条件を明記）
-2. 出力契約 `pending_structural_reviews.json` の schema 確定（verdict enum / 逐語根拠 / 提案 / 影響範囲 / trigger 種別）
-3. self-reflection に **再発シグナル → escalation 行を queue** する分岐を追加（memory N+1 を書く代わりに escalate する閾値）
-4. 親が queue の escalation を拾って `root-cause-auditor` を起動する経路（明示起動も）
+2. 出力契約 = **parent へ返す構造化レポート**の schema 確定（verdict enum / 逐語根拠 / 提案 / 影響範囲 / trigger 種別）。永続キューは持たない（2026-06-19〜）
+3. self-reflection に **再発シグナル → 完了メッセージに `ESCALATION:` ブロックを返す** 分岐を追加（memory N+1 を書く代わりに escalate する閾値）
+4. 親が reflection 完了結果の `ESCALATION:` を拾って `root-cause-auditor` を inline 起動する経路（明示起動も）。実装: `detect_acceptance_signal.py` の完了処理 (3) inline drain
 5. （任意）定期 sweep の loop 所有権判断
 6. docs/self-improvement-loop.md に三系統（self-reflection / rule-auditor / root-cause-auditor）として反映
 

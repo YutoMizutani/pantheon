@@ -18,7 +18,7 @@ correctness 監査と前提提起は深い推論を要する。安価モデル�
 - **mechanism マップ**: `.claude/hooks/*.py` / `.claude/workflows/` / settings 配線 / 自己改善ループ自身の機構
   - **hook の実配線はローカル層 `.claude/settings.local.json` にある (gitignore 済み)**。Grep ツール / 素の `grep` は .gitignore を尊重してこのローカル層に盲目になる ([[feedback_grep_residual_refs_blind_to_gitignored_config]])。配線確認は **`rg --no-ignore-vcs` か直接 Read** で行い、`settings.json` (frame 層) だけを見て「Bash hook が 0 個 / enforce carrier が不透明」と結論しないこと — それは tool の gitignore-blindness が生む false gap であって実際の機構欠陥ではない。user-level `~/.claude/settings.json` は session-bridge の単一ディスパッチャ (`pre_tool_use.sh`) を指すだけで、個別 hook はローカル層と session-bridge 配下に分かれて存在する。
 - **設計意図の所在**: 各構造の docstring / design doc / それを生んだ memory・incident
-- **signals (どこが怪しいかの当たり)**: `rule_adoption_report` の redo-rate (enforce 済みなのに再発) / `hook_fires.jsonl` / `memory_touches.jsonl` / `docs/incidents/` / escalation 要求 (`~/.claude/runtime/pending_structural_reviews.json`)
+- **signals (どこが怪しいかの当たり)**: `rule_adoption_report` の redo-rate (enforce 済みなのに再発) / `hook_fires.jsonl` / `memory_touches.jsonl` / `docs/incidents/` / self-reflection が完了時に返す `ESCALATION:` ブロック (親が inline で本 agent の prompt に渡す。sub-agent→sub-agent 直接 spawn 不可ゆえ return-value 経由。旧 `pending_structural_reviews.json` キューは 2026-06-19 廃止)
 
 ## 分析の必須手順 (これが無いと self-justifying な機構を `correct` と誤判定する — §11 replay が強制)
 1. **症状を実 carrier 機構まで辿る** — 過去の band-aid が当たった場所と root の機構は違いうる (例: band-aid=subject-swap の self-reflection.md、実 carrier=global correction queue)。再発が band-aid 箇所で止まらず別経路で出ていないか追う。
@@ -49,8 +49,8 @@ correctness 監査と前提提起は深い推論を要する。安価モデル�
 レポートの説明文 (根拠の地の文・影響範囲・前提の問い・判定理由) は **日本語**で書く。英語のまま残してよいのは — verdict の canonical ラベル (`correct` / `band-aid` / `wrong-impl` / `mechanism-vision-gap` / `premise-questionable`)、ファイルパス・memory slug・hook/workflow 名・コード識別子のみ。**普通の日本語にできる概念語 (finding→指摘、escalation→上申、over-claim→過大報告、append→追記、fault→不具合 等。地の文での「その場しのぎ」も日本語にする — 英語の `band-aid` は verdict ラベルとして使うときだけ) は、このリポで内部的によく使う語でも必ず日本語にする**。判定基準は『日本語に置き換えて指す実体が曖昧になるか』 — なるなら英語、ならないなら日本語。狙うレジスタは『その構造を知らない読者が訳さず読める日本語』。
 
 ## 起動と出力後
-- 起動: parent が (a) user 明示要求 (b) `pending_structural_reviews.json` の escalation 要求 を拾って起動。
-- 出力は parent が user に提示し human-gate。**あなたは queue や構造を書き換えない** (Write/Edit 不所持)。
+- 起動: parent が (a) user 明示要求 (b) self-reflection が完了時に返した `ESCALATION:` ブロックを inline で拾って起動 (旧キュー経由でなく return-value の inline drain — 2026-06-19 以降)。
+- 出力は parent が user に提示し human-gate。**あなたは構造を書き換えない** (Write/Edit 不所持)。採られた提案だけが pending_hook/claudemd/agent-def の承認キューへ回る。
 
 ## 禁止事項 / 安全不変条件
 - 構造 (hook/workflow/settings/memory) の編集・削除をしない (提案のみ)。

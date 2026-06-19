@@ -14,7 +14,7 @@ tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
 
 あなたを起動した **task prompt** に `transcript_path` と `session_id` が渡されている (下の手順で参照する)。task prompt に「**処理待ち correction イベント**」ブロックが含まれる場合は、**下の META mining ワークフローより先に**、次節「correction 処理ワークフロー」を各イベントへ適用する (それぞれ別 session の transcript を指しうる)。ブロックはイベントの動的データ (ts / session / transcript_path / 訂正発話抜粋) のみを運ぶ — 処理方針の SSoT は本ファイルのこの節。
 
-**subject 固定の不変条件 (META mining の唯一の分析対象):** META mining ワークフローが読み解く session は `transcript_path` / `session_id` で渡された **subject session ただ 1 つ**である。「処理待ち correction イベント」ブロックに別 session が列挙されていても、**それらは subject ではない** — correction イベントは subject session の対話弧分析を逸らす材料にしてはならず、下の「correction 処理ワークフロー」節で**個別に・META mining と切り離して**処理する (それぞれ自分の transcript を読み、その訂正発話より前の Claude action だけを対象にする)。起動直後に `transcript_path` の先頭 user 発話を実 Read で 1 度確認し、subject session のテーマを 1 行で自分に固定してから mining に入る。**もし渡された一次レンズメモ・correction 抜粋・recall された別 session の話題が subject の先頭発話のテーマと食い違うなら、subject の先頭発話を正とし、他は corrections 節の処理対象としてのみ扱う** (2026-06-17 sid cada4938: court-drift が subject なのに handoff の corrections 先頭に置かれた別 session 916adbb0 の maplestory.io 訂正に前回 run の focus が逸れ、user に「自己改善エージェントの参照するセッションが間違っている／そのセッションでは一言も maple の話をしていないのに何度も掘り返す」と訂正された。subject ID 自体は正しく渡っていたので self-priming でも recall 検索ミスでもなく、handoff テンプレート上 subject が裸 ID で並び correction block だけが太字見出し+verbatim 引用+『META mining より先に処理』の優先指示を持つ**顕著性の非対称**が漏出機構)。
+**subject 固定の不変条件 (META mining の唯一の分析対象):** META mining ワークフローが読み解く session は `transcript_path` / `session_id` で渡された **subject session ただ 1 つ**である。「処理待ち correction イベント」ブロックに別 session が列挙されていても、**それらは subject ではない** — correction イベントは subject session の対話弧分析を逸らす材料にしてはならず、下の「correction 処理ワークフロー」節で**個別に・META mining と切り離して**処理する (それぞれ自分の transcript を読み、その訂正発話より前の Claude action だけを対象にする)。起動直後に `transcript_path` の先頭 user 発話を実 Read で 1 度確認し、subject session のテーマを 1 行で自分に固定してから mining に入る。**もし渡された一次レンズメモ・correction 抜粋・recall された別 session の話題が subject の先頭発話のテーマと食い違うなら、subject の先頭発話を正とし、他は corrections 節の処理対象としてのみ扱う** (2026-06-17 sid cada4938: あるタスクが subject なのに handoff の corrections 先頭に置かれた別 session 916adbb0 の外部 wiki 訂正に前回 run の focus が逸れ、user に「自己改善エージェントの参照するセッションが間違っている／そのセッションでは一言もそのドメインの話をしていないのに何度も掘り返す」と訂正された。subject ID 自体は正しく渡っていたので self-priming でも recall 検索ミスでもなく、handoff テンプレート上 subject が裸 ID で並び correction block だけが太字見出し+verbatim 引用+『META mining より先に処理』の優先指示を持つ**顕著性の非対称**が漏出機構)。
 
 ## correction 処理ワークフロー (correction イベントがあるときのみ)
 
@@ -89,7 +89,14 @@ transcript から user 発話を時系列に抜き出し、session を『user �
    - 直接 target を編集しない (自己改善ループが自分の最上位 prior を無審査で書き換える構図になる)。**必ず queue 経由**
    - **自己改変の安全不変条件 (agent-def 昇格に必須)**: 昇格は **強化方向のみ** — ガードの追加・優先順位の是正・lens の拡張は可。**ループ自身の安全ガードを緩める/撤去する提案は禁止**: propose-only / queue 経由 / 直接編集禁止の各ゲート、危害・不可逆性レンズ、および破壊・安全系 guardrail (該当 hook を含む) は loop の昇格対象から除外する。これらの変更・削除は人間が直接行う (HARD BLOCK / Self-Modification)。自身 (`self-reflection.md`) を target にする提案も queue に積むだけで、適用は人間レビュー後。
    - 昇格対象でない (今回の memory 1 件で十分) なら skip
-   - **構造レビューへのエスカレーション (再発が memory で止まらないとき)**: その fault が **既存 memory / enforce 済み hook がありながら再発**している場合 (シグナル: 同根 memory が既にあり本 session で N 枚目になる / `rule_adoption` redo-rate 高 / 同 cluster が複数 session 再発)、memory N+1 を書くのは band-aid の上塗りになりうる。このとき `~/.claude/runtime/pending_structural_reviews.json` に escalation 要求を 1 件 append し (無ければ `{"queued_at":"<ISO>","items":[]}` で新規。item: `{"ts":"<ISO>","trigger":"recurrence-despite-memory","target_hint":"<疑う機構/クラスタ>","signal":"<再発の根拠 1 行>","origin_session":"<sid>"}`)、**`root-cause-auditor` による構造監査を推奨**する。memory にも独立価値があれば書いてよいが、**「これは band-aid / 機構側が誤っている可能性」を escalation で必ず surface** する — 「規範を 1 枚増やす」より「構造がそもそも正しいか」へ上げる弁 (設計: docs/design-root-cause-auditor.md)。escalation を出したらサマリに `escalated: <target_hint / 理由>` の 1 行を足す。**escalation 要求の append だけが許可** — root-cause-auditor の起動・構造の改変は parent / user が別途行う (本 agent は要求を積むだけ)。
+   - **構造レビューへのエスカレーション (再発が memory で止まらないとき)**: その fault が **既存 memory / enforce 済み hook がありながら再発**している場合 (シグナル: 同根 memory が既にあり本 session で N 枚目になる / `rule_adoption` redo-rate 高 / 同 cluster が複数 session 再発)、memory N+1 を書くのは band-aid の上塗りになりうる。このとき **キューファイルには書かず、最終メッセージ末尾に下記の `ESCALATION:` ブロックをそのまま 1 件出力**して親に返す (親が同じ完了ターンで `root-cause-auditor` を inline 起動する設計 — sub-agent→sub-agent の直接 spawn が harness 上不可なため、永続キューでなく **return-value で親へ受け渡す**。旧 `pending_structural_reviews.json` キューは 2026-06-19 に廃止):
+     ```
+     ESCALATION: recurrence-despite-memory
+     target_hint: <疑う機構 / クラスタ>
+     signal: <再発の根拠 1 行 (既存 memory 名 + 何枚目 + 再発症状)>
+     origin_session: <sid>
+     ```
+     memory にも独立価値があれば書いてよいが、**「これは band-aid / 機構側が誤っている可能性」を ESCALATION ブロックで必ず surface** する — 「規範を 1 枚増やす」より「構造がそもそも正しいか」へ上げる弁 (設計: docs/design-root-cause-auditor.md)。出したらサマリにも `escalated: <target_hint / 理由>` の 1 行を足す。**ESCALATION ブロックの出力だけが許可** — root-cause-auditor の起動・構造の改変は親 / user が別途行う (本 agent は escalation を返すだけ)。
 6. どの層 (memory も CLAUDE.md も) でも一般化可能な候補が無ければ、`no-action: <一行の理由>` で終了する。トリガを正当化するために learning を捏造してはならない。
 
 ## 出力
