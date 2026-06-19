@@ -34,7 +34,10 @@ QUEUES = [
     ("hook",       "pending_hook_registrations.json",  "hook 登録"),
     ("claudemd",   "pending_claudemd_updates.json",    "CLAUDE.md/rules 昇格"),
     ("agent-def",  "pending_agent_def_updates.json",   "agent 定義変更 (self-mod)"),
-    ("structural", "pending_structural_reviews.json",  "構造監査 (root-cause-auditor 起動要求)"),
+    # structural (pending_structural_reviews.json) は 2026-06-19 廃止。
+    # root-cause-auditor の起動要求は永続キューでなく self-reflection の return-value
+    # (ESCALATION ブロック) を親が完了ターンで inline drain する方式へ移行したため、
+    # 滞留 surface の対象外。残る 3 キューは self-modification の人間承認ゲートなので維持。
 ]
 
 DEFAULT_STALE_DAYS = 1.0

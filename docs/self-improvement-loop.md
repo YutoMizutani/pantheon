@@ -33,13 +33,13 @@ memory の参照も記録 ── touch_memory_on_read.py → telemetry/memory_to
 ```
 
 > **2026-06-17 — correction intake の二層化（global queue 退役 → stateless nudge へ置換）**
-> 設計: [design-self-improvement-two-tier-intake.md](design-self-improvement-two-tier-intake.md) / [incidents/2026-06-17-correction-queue-cross-session-drift.md](incidents/2026-06-17-correction-queue-cross-session-drift.md)
+> 設計: [design-self-improvement-two-tier-intake.md](design-self-improvement-two-tier-intake.md)
 >
 > 旧 `detect_correction_signal_v2.py` + global correction queue を**退役**（`.claude/hooks/.archive/` 退避・
 > queue 空・`detect_acceptance_signal.py` の drain コード除去済・signals.json の旧 correction 語彙削除）。
 > 退役理由は 2 構造欠陥: (1) **cross-subject drift** — global queue が acceptance 時に全セッションの
-> 未処理 correction を一括 drain し、無関係セッションの reflection に混入（court_frames の振り返りが
-> 別セッション由来の maple 提案差し戻しを語った実例）。(2) **自己給餌** — detector が「自己改善」等
+> 未処理 correction を一括 drain し、無関係セッションの reflection に混入（あるセッションの振り返りが
+> 別セッション由来の提案差し戻しを語った実例）。(2) **自己給餌** — detector が「自己改善」等
 > ループ自身の meta 議論にも発火し queue を補充し続けた。
 >
 > **置換 = 二層 intake**（上図）:
@@ -63,7 +63,9 @@ self-improvement は放っておくと「失敗 → memory を 1 枚足す」と
 - **rule-auditor**（cross-corpus・**使用量 GC**・量的）— 0 発火 hook / 未読 memory / queue 滞留を列挙し deprecation 候補。「何が死んでるか」。
 - **root-cause-auditor**（cross-corpus + cross-mechanism・**correctness 監査**・質的）— フック等実装 / memory 記載 / 機構設計の **誤り・band-aid・意図乖離** を検知し「**そもそも正しいか?**」を提起、根本修正を提案する（今回の global correction queue 退役+二層再設計が原型）。設計: [design-root-cause-auditor.md](design-root-cause-auditor.md)。判断のみ・自動改変ゼロ・human-gate。
 
-**escalation 弁**: self-reflection が「**既存 memory/hook がありながら同根 fault が再発**」を観測したら、memory N+1（band-aid の上塗り）でなく `~/.claude/runtime/pending_structural_reviews.json` に **root-cause-auditor 起動要求**を積む。「規範を増やす」から「構造がそもそも正しいか問う」へ上げる弁。要求は `heaven/tools/pending_queue_report.py` が滞留 surface し、user/parent が root-cause-auditor を起動する（sub-agent→sub-agent の直接 spawn 不可ゆえ queue 経由）。
+**escalation 弁**: self-reflection が「**既存 memory/hook がありながら同根 fault が再発**」を観測したら、memory N+1（band-aid の上塗り）でなく **完了メッセージに `ESCALATION:` ブロックを返す**。「規範を増やす」から「構造がそもそも正しいか問う」へ上げる弁。sub-agent→sub-agent の直接 spawn は harness 上不可なので、self-reflection は escalation を **return-value** で親へ渡し、**親が同じ完了ターンで root-cause-auditor を inline 起動する（inline drain）**。
+
+> **2026-06-19 設計変更**: 旧方式は escalation を `~/.claude/runtime/pending_structural_reviews.json` に永続キューし `heaven/tools/pending_queue_report.py` が滞留 surface → user/parent が手動起動、だった。だが「消費する主体・トリガ」が parent の自動 drain として実装されておらず、9 件まで滞留して機能しなかった（pending_queue_report.py 自身が警告する「実行主体未定義」欠陥の再発）。永続キューを廃し return-value の inline drain へ移行。なお hook 登録 / CLAUDE.md 昇格 / agent 定義変更の **self-modification 承認キュー (`pending_hook/claudemd/agent-def`) は維持** — これは「人間レビュー前に自己改変を適用しない」安全ゲートであり、handoff キューとは役割が別。
 
 なぜ別 agent か: 質的 correctness 監査と量的 usage GC は altitude が違い、混ぜると責務が濁る。**乱立しているのは memory であって agent ではなく**、この agent の存在目的はむしろ band-aid memory の積層を構造修正へ畳むこと。限界: 「本当に必要だったもの」は intent gap（Tree Swing の教訓: 下流は need を復元できない）なので、agent は候補と前提の問いを surface するだけ・価値判断は user。
 

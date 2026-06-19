@@ -254,6 +254,8 @@ Inputs:
 Spawn the background sub-agent in the same turn as your user-facing response.
 
 可視性 (silent 運用は廃止済み): 完全サイレントにはしない。(1) 起動した同じ応答の末尾に日本語で1行だけ通知する — 例「🔍 自己改善リフレクションをバックグラウンド起動（完了時に結果を1行で出す）」。(2) この background エージェントの完了通知 (task-notification) を受け取ったターンで、結果を日本語1行に圧縮して出す — 例「✅ リフレクション完了: <memory N件更新 / no-action: 理由>」。reflection 内部の思考や全文はチャットに出さず、必ず1行ダイジェストに留める。
+
+(3) inline drain (旧 pending_structural_reviews.json キューの後継 — 2026-06-19 廃止): reflection の完了結果に `ESCALATION: recurrence-despite-memory` ブロックが含まれていたら、**その同じ完了ターンで** root-cause-auditor を inline 起動する (Agent tool, subagent_type: root-cause-auditor, run_in_background: true)。ブロックの target_hint / signal / origin_session をそのまま auditor の prompt に渡す。キューファイルへは一切書かない・読まない。auditor 完了時はその verdict を user に提示し human-gate (採否は user、採った提案だけ pending_hook/claudemd/agent-def 承認キューへ)。ESCALATION ブロックが無ければ (3) は何もしない。
 </system-reminder>"""
 
 

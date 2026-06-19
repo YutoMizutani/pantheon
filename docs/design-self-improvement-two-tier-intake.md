@@ -4,7 +4,7 @@
 |---|---|
 | 状態 | Proposed（2026-06-17）— 実装未着手 |
 | 置換対象 | 退役した global correction queue（INC-2026-06-17-01） |
-| 関連 | [incidents/2026-06-17-correction-queue-cross-session-drift.md](incidents/2026-06-17-correction-queue-cross-session-drift.md) / [self-improvement-loop.md](self-improvement-loop.md) |
+| 関連 | [self-improvement-loop.md](self-improvement-loop.md) |
 
 ## 1. 目的と原則
 
