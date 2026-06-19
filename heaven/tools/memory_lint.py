@@ -7,8 +7,9 @@
     実例 (原環境): ある判断記録が index 漏れし、却下済み案を再提案しかけた。
   - broken: index が実在しないファイルを指す = index が嘘をつく。
   - frontmatter 不備: name と filename の不一致は [[wikilink]] 解決を壊す。
-  - MEMORY.md 肥大: auto-load 上限 (~24.4KB) を超えると index 自体が
-    読み込まれなくなる。閾値接近を早期警告する。
+  - MEMORY.md 肥大: auto-load 上限 (公式: 先頭 200 行 or 25KB の先に達した方) を
+    超えると超過分が silent truncate され recall を失う。byte/行 両方の閾値接近を
+    早期警告する。
 
 observable-signal: 本スクリプトの exit code (0=clean / 1=issues / 2=crash)
   と件数つきレポート。定期チェック (cron 等) から composable に呼べる。
@@ -39,9 +40,19 @@ import sys
 from pathlib import Path
 
 MEMORY_DIR = Path(__file__).resolve().parent.parent / "memory"
-# MEMORY.md は毎セッション auto-load される。上限は実測 24.4KB (MEMORY.md 注記)。
+# MEMORY.md は毎セッション auto-load される。公式仕様
+# (https://code.claude.com/docs/en/memory): 「先頭 200 行、または先頭 25KB、
+# いずれか先に達した方」がロードされ、超過分は silent truncate される。
+# byte 上限は公式 25KB に ~600B のヘッドルームを取った保守値を warn 閾値に使う
+# (旧コメントの「実測 24.4KB」は出所不明だったため公式 citation に差し替え)。
+# 行上限は公式どおり 200 (旧実装は byte しか見ておらず行制約を取りこぼしていた)。
 AUTOLOAD_LIMIT_BYTES = 24_400
-AUTOLOAD_WARN_RATIO = 0.9
+AUTOLOAD_LIMIT_LINES = 200
+# early-warn は「真に限界へ接近」時だけ鳴らす。0.9 だと 195 枚規模の自然な定常域
+# (~22.5KB) で毎朝 morning-check が発火し loud×frequent な noise になる
+# ([[feedback_observability_only_for_silent_failures]])。0.95 = 23,180B で発火 →
+# 公式 25KB の手前 ~1.8KB という実用的 consolidation window を残しつつ定常域は [ok]。
+AUTOLOAD_WARN_RATIO = 0.95
 
 VALID_TYPES = {"user", "feedback", "project", "reference"}
 
@@ -149,6 +160,9 @@ def lint(memory_dir: Path = MEMORY_DIR) -> dict:
 
     autoload = memory_dir / "MEMORY.md"
     autoload_bytes = autoload.stat().st_size if autoload.exists() else 0
+    autoload_lines = (
+        autoload.read_text(encoding="utf-8").count("\n") + 1 if autoload.exists() else 0
+    )
 
     return {
         "memory_files": len(memory_files),
@@ -160,7 +174,13 @@ def lint(memory_dir: Path = MEMORY_DIR) -> dict:
         "dangling_wikilinks_info": dangling,
         "autoload_bytes": autoload_bytes,
         "autoload_limit_bytes": AUTOLOAD_LIMIT_BYTES,
-        "autoload_warn": autoload_bytes > AUTOLOAD_LIMIT_BYTES * AUTOLOAD_WARN_RATIO,
+        "autoload_lines": autoload_lines,
+        "autoload_limit_lines": AUTOLOAD_LIMIT_LINES,
+        # 公式は byte/行 いずれか先に達した方で truncate するので、どちらかが警告域なら warn。
+        "autoload_warn": (
+            autoload_bytes > AUTOLOAD_LIMIT_BYTES * AUTOLOAD_WARN_RATIO
+            or autoload_lines > AUTOLOAD_LIMIT_LINES * AUTOLOAD_WARN_RATIO
+        ),
     }
 
 
@@ -186,13 +206,16 @@ def render(report: dict) -> tuple[str, int]:
         lines.append(f"\n[WARN] 二重名 (name が filename と完全別系統) {len(report['dual_names'])} 件:")
         lines += [f"  - {i['file']}: name '{i['name']}'" for i in report["dual_names"]]
 
-    pct = report["autoload_bytes"] / report["autoload_limit_bytes"] * 100
+    pct_b = report["autoload_bytes"] / report["autoload_limit_bytes"] * 100
+    pct_l = report["autoload_lines"] / report["autoload_limit_lines"] * 100
     marker = "[WARN]" if report["autoload_warn"] else "[ok]"
     if report["autoload_warn"]:
         issues += 1
     lines.append(
         f"\n{marker} MEMORY.md auto-load: {report['autoload_bytes']:,}B "
-        f"/ {report['autoload_limit_bytes']:,}B ({pct:.0f}%)"
+        f"/ {report['autoload_limit_bytes']:,}B ({pct_b:.0f}%), "
+        f"{report['autoload_lines']} 行 / {report['autoload_limit_lines']} 行 ({pct_l:.0f}%) "
+        f"— 公式は byte/行 いずれか先に達した方で truncate"
     )
 
     if report["frontmatter_info"]:
@@ -227,7 +250,10 @@ def render_quiet(report: dict) -> tuple[str, int]:
     if report["autoload_warn"]:
         problems.append(
             f"  WARN MEMORY.md auto-load {report['autoload_bytes']:,}B "
-            f"/ {report['autoload_limit_bytes']:,}B — 分冊へ退避を検討"
+            f"/ {report['autoload_limit_bytes']:,}B ({report['autoload_lines']}行) — "
+            "観測セッションが畳む owner。protocol: auto-load section を 1 つ on-demand 分冊 "
+            "(MEMORY-*.md) へ verbatim 退避し、本体にトリガ pointer を残す "
+            "(既存例: section 5/6.5/7-10/web)。recall ゼロ損・移送後に再 lint で orphan 0 を確認"
         )
     if not problems:
         return (
