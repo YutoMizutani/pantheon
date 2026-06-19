@@ -325,6 +325,18 @@ const inventory = await agent(inventoryPrompt, {
   schema: INVENTORY_SCHEMA,
 })
 
+// agent() は null を返しうる (session limit / API error / rate limit). 未ガード参照を避け
+// phase ごと graceful に落とす (workflow-io-contract #6). 2026-06-19 に本番でこの行が
+// `inventory.atomic_claims` の null 参照でクラッシュした (failure-modes-2026-06-19.md ②).
+if (!inventory) {
+  return {
+    status: 'inventory_failed',
+    question,
+    reason: 'Inventory phase の agent が null を返した (session limit / API error / rate limit). 推測で埋めず停止する.',
+    next_action: 'レート制限が原因なら時間を空けて再起動 / 恒常的なら max_parallel を下げて再実行する.',
+  }
+}
+
 log(
   `Inventory: 命題 ${inventory.atomic_claims.length} 件, 一次ソース fetch 成功 ${inventory.fetch_success_count} / 失敗 ${inventory.fetch_fail_count}`,
 )
@@ -475,6 +487,19 @@ ${JSON.stringify(settled.map(s => ({ claim: s.claim.claim, claim_id: s.claim.id,
 schema (SYNTHESIS_SCHEMA) に従った JSON のみ.`,
   { label: 'synthesis', phase: 'Synthesis', model: 'opus', schema: SYNTHESIS_SCHEMA },
 )
+
+// 最終 (最高コスト) phase. agent() が null だと下の synthesis.* 参照で全成果を巻き込んで
+// クラッシュする (2026-06-19 本番で `synthesis.unverified_assumptions_in_recommendation` の
+// null 参照で発生. failure-modes-2026-06-19.md ②). graceful に落とす (workflow-io-contract #6).
+if (!synthesis) {
+  return {
+    status: 'synthesis_failed',
+    question,
+    reason: 'Synthesis phase の agent が null を返した (session limit / API error / rate limit). 統合できず停止する.',
+    next_action: '時間を空けて再起動する (research/adversarial の settle は再実行で取り直しになる点に留意).',
+    settled_count: settled.length,
+  }
+}
 
 // ============================================================
 // 返却
