@@ -15,7 +15,7 @@
   (b) 補助 = filesystem mtime。daemon (logs/runtime/status/*.log/*-wal/*.sqlite) と
       build/dep (target/.venv/node_modules/dist/build...) を除外。fs mtime は罠だらけなので seed 専用。
   (c) サブプロジェクト粒度 = 最近接の CLAUDE.md を持つ祖先 dir を unit にする
-      (projects/behavior でなく projects/behavior/operantkit)。
+      (projects/foo でなく projects/foo/subapp)。
   (d) [撤去済 2026-06-15] 編集 vs 実行の2軸は run 信号(logs/outputs mtime)が不忠実で誤検知したため
       flagging からは外した (編集鮮度だけを信頼)。run は ledger に収集のみ (将来用・現在未使用)。
 
@@ -205,7 +205,7 @@ def compute_stalls(ledger):
         if ed is not None and ed >= EDIT_THRESHOLD:
             reason = f"{ed:.0f}日 編集なし"
         # run-staleness ブランチは撤去 (user 訂正 2026-06-15): logs/outputs の mtime は「実際に動かしたか」
-        # の忠実な信号でなく、編集が最近(operantkit=9d)でも誤検知した。編集鮮度だけを信頼する。
+        # の忠実な信号でなく、編集が最近(9d 前)でも誤検知した。編集鮮度だけを信頼する。
         if reason:
             out.append({"unit": u, "reason": reason, "edit_days": ed, "run_days": rd,
                         "file": d.get("edit_file", ""), "warmth": ed if ed is not None else 999})

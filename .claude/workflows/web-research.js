@@ -1,5 +1,5 @@
 /**
- * web-research workflow — 外部事実 (ゲーム仕様 / 製品仕様 / 数値) を
+ * web-research workflow — 外部事実 (仕様 / 数値 / 相場) を
  *   「一次ソースを実取得し確度ラベル付きで一度に確定する」フローで閉じる.
  *
  * 解く失敗 (過去5セッション 33fdb45a/32f68fba/3f55745d/5a029e91/6240f31c の横断分析):
@@ -61,7 +61,7 @@
 export const meta = {
   name: 'web-research',
   description:
-    '外部事実 (ゲーム仕様/製品仕様/数値) を一次ソースを実取得して確度ラベル付きで確定する. Inventory→Research→Adversarial→Synthesis. 一次ソース fetch 成功 0 なら abort し推測で埋めない',
+    '外部事実 (仕様/数値/相場) を一次ソースを実取得して確度ラベル付きで確定する. Inventory→Research→Adversarial→Synthesis. 一次ソース fetch 成功 0 なら abort し推測で埋めない',
   whenToUse:
     '正解が datamine/公式ドキュメント/wiki に在りうる外部事実を reference/outputs に書く前. または「〜は本当か」の既存主張 verify. conceptual な質問や URL 事前不明の汎用リサーチ (それは deep-research skill) には使わない. args は JSON object {question (必須), claims?, primary_urls?, project?, budget?, max_parallel?} 推奨 — bare string も question として受理',
   phases: [
