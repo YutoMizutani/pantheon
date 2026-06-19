@@ -40,13 +40,13 @@ CASES = [
     # ---- GREEN: single standalone absolute-path rm (the supported form) ----
     ("single absolute tmp rm", f"rm -rf {LLM}/tmp/foo", None, True),
     ("project tmp absolute", f"rm -rf {LLM}/projects/example/tmp/x", None, True),
-    ("app-level tmp", f"rm -rf {LLM}/projects/example/apps/app/tmp/y", None, True),
+    ("app-level tmp", f"rm -rf {LLM}/projects/example/apps/sample-app/tmp/y", None, True),
     ("pycache absolute", f"rm -rf {LLM}/projects/example/__pycache__", None, True),
     ("glob inside tmp", f"rm -rf {LLM}/tmp/*", None, True),
 
     # ---- BAIL: discipline boundary — compound / relative are NOT auto-approved ----
     ("compound form bails (discipline)",
-     f'cd {LLM}\necho "x"; rm -rf tmp/_court_frames 2>&1 && echo "removed"', None, False),
+     f'cd {LLM}\necho "x"; rm -rf tmp/_dump_frames 2>&1 && echo "removed"', None, False),
     ("compound relative even with cwd", "rm -rf tmp/foo", LLM, False),
     ("cd && rm bails", f"cd {LLM} && rm -rf tmp/a 2>/dev/null", None, False),
 
