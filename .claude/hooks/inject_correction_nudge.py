@@ -1,11 +1,25 @@
 #!/usr/bin/env python3
-"""inject_correction_nudge — stateless lightweight correction handler.
+"""inject_correction_nudge — stateless lightweight push-back handler.
 
-On a UserPromptSubmit whose prompt matches a correction signal (the user
-pointing out a Claude failure), inject ONE <system-reminder> block nudging the
-MAIN Claude to self-diagnose and fix in-context. STATELESS by design: no queue,
-no memory write, no sub-agent spawn. Durable learning waits for an explicit
-acceptance signal — detect_acceptance_signal.py is the sole memory-write gate.
+On a UserPromptSubmit whose prompt matches a correction signal (the user pushing
+back on the prior Claude turn), inject ONE <system-reminder> block nudging the
+MAIN Claude to FIRST CLASSIFY the push-back before reacting:
+  (a) empirical correction — the user holds a decisive observation/measurement
+      (real-machine observation, primary-source value) → verify it and defer
+      (the user's ground truth outranks Claude's proxy reasoning); or
+  (b) design/judgment counter-proposal — neither side holds a decisive
+      measurement ("which approach is better") → DON'T cave by default and
+      DON'T stubbornly defend; write the shared judgment criteria and score
+      both options on them before concluding.
+The classification (which the regex layer cannot do — same surface vocabulary
+for both) lives in the main model, which has the in-context content the hook
+lacks. This generalizes feedback_no_high_confidence_when_decisive_measurement_absent
+and feedback_user_observation_outranks_proxy_diagnosis to the symmetric case:
+absent a decisive measurement, grant authority to NEITHER side.
+
+STATELESS by design: no queue, no memory write, no sub-agent spawn. Durable
+learning waits for an explicit acceptance signal — detect_acceptance_signal.py
+is the sole memory-write gate.
 
 Replaces the retired global correction queue (INC-2026-06-17-01 /
 docs/design-self-improvement-two-tier-intake.md): that queue drained
@@ -55,7 +69,10 @@ _SYSTEM_USER_PREFIXES = (
 )
 
 _NUDGE = """<system-reminder>
-[correction-signal] 直前のあなた(Claude)の応答に対する訂正の可能性があります。応答の前に、直近のやり取りで自分が外した点を 1–3 行で自己診断し、その場で修正してください。**reflection の spawn・memory 書き込みはしないこと** — durable な学習は user の明示 acceptance（「完了」「ok」等）を待ちます。訂正でなければ（第三者の状態説明等）この行を無視して通常どおり応答してください。
+[correction-signal] 直前のあなた(Claude)の応答への push-back の可能性があります。応答の前に、まず何への指摘かを分類してください:
+(a) **事実の訂正** — ユーザーが決定的な観測/測定（実機観測・一次ソースの値）を握っている場合。→ それを検証し、ユーザー観測を上位として自説を改める。
+(b) **設計/判断の対案** — 「どちらの案が良いか」等、どちらも決定的測定を握っていない場合。→ 迎合して自動的にユーザー案を採らない・自案にも固執しない。両案の判定基準を 1–2 行で書き出し、自案とユーザー案を各基準で中立に採点してから結論を出す。
+そのうえで誤りが見つかればその場で修正してください。**reflection の spawn・memory 書き込みはしないこと** — durable な学習は user の明示 acceptance（「完了」「ok」等）を待ちます。push-back でなければ（第三者の状態説明等）この行を無視して通常どおり応答してください。
 </system-reminder>"""
 
 
