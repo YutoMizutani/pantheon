@@ -4,9 +4,9 @@ resolves into the git-unrecoverable `projects/` tree, unless the command carries
 a verbatim acknowledgement marker.
 
 Root cause this prevents (see feedback_verify_move_landed_before_rm.md):
-  2026-06-13, a multi-line script did `git mv projects/mac-remote-desktop ...`
+  2026-06-13, a multi-line script did `git mv projects/example-old ...`
   (which failed with `fatal: source directory is empty`) and then, on a later
-  line, `rm -rf projects/mac-remote-desktop`. The script relied on `set -e` to
+  line, `rm -rf projects/example-old`. The script relied on `set -e` to
   abort after the failed move — but `set -e` is STRUCTURALLY INERT in the Bash
   tool: the harness wraps the script as `... && eval '<script>' && pwd -P ...`,
   placing the eval in a NON-FINAL position of an AND-OR list, where POSIX/zsh
@@ -27,10 +27,17 @@ Also covered (same unrecoverable class, agreed 2026-06-13 review):
     "cleanup" git clean wipes the same tree as the rm incident — same cost, and
     easy to type by reflex. Dry-run (`-n`) is never blocked.
 
+Now covered (2026-06-17, generalize-on-recurrence after a live cd-relative-rm
+bypass): an in-command `cd <dir>` (absolute, or relative to the assumed llm-root
+cwd) retargets a subsequent relative recursive rm — `cd projects/x && rm -rf y`.
+Also the gitignored heaven/ subtrees (heaven/memory, heaven/projects) and the
+heaven root, which are unrecoverable like projects/.
+
 NOT covered (deferred per generalize-on-recurrence — see memory How-to-apply):
-  `find projects/ -delete`, `rm -rf *` after a cd into projects/ (cwd is
-  unknowable from the command string), and non-recursive single-file rm. These
-  are noted in feedback_verify_move_landed_before_rm.md; harden only on recurrence.
+  `find projects/ -delete`, a `cd` in a SEPARATE prior Bash call (cross-command
+  cwd is unknowable from one command string), non-recursive single-file rm, and a
+  dangerous `git clean -fdx heaven` (git clean still uses projects/-only scope).
+  These are noted in feedback_verify_move_landed_before_rm.md; harden on recurrence.
 
 Contract:
   - Fires when an actual command VERB is `rm` (bare / /bin/rm / abs path),
@@ -140,30 +147,31 @@ def _operands(args):
     return paths
 
 
-def _resolve(operand: str) -> Path:
+def _resolve(operand: str, cwd: Path = None) -> Path:
     """Resolve an operand to an absolute path. Relative operands are taken
-    relative to the canonical llm root (the Bash tool's working dir for this
-    repo). Globs are reduced to their directory portion."""
+    relative to ``cwd`` — the running shell cwd within the command, which an
+    in-command ``cd`` updates — defaulting to the canonical llm root (the Bash
+    tool's working dir for this repo). Globs are reduced to their directory
+    portion. ``os.path.normpath`` collapses ``..`` so traversal resolves."""
     base = operand
     if any(c in operand for c in "*?["):
         base = os.path.dirname(operand) or operand
     p = Path(base)
     if not p.is_absolute():
-        p = LLM_ROOT / p
+        p = (cwd or LLM_ROOT) / p
     try:
         return Path(os.path.normpath(str(p)))
     except Exception:
         return p
 
 
-def _is_protected(operand: str) -> bool:
-    """True if a recursive rm of this operand would hit the git-unrecoverable
-    projects/ tree (excluding scratch tmp/ and regenerable __pycache__)."""
-    if ".." in Path(operand).parts:
-        # Ambiguous traversal into the tree — treat conservatively as protected
-        # only if it textually targets projects/ (avoid blocking unrelated rm).
-        return "projects" in Path(operand).parts
-    resolved = _resolve(operand)
+def _is_protected(operand: str, cwd: Path = None) -> bool:
+    """True if a recursive rm of this operand would hit a git-unrecoverable tree:
+    projects/ (whole), or the gitignored heaven/ subtrees (heaven/memory = memory
+    実体, heaven/projects = creative archive 等) and the heaven root
+    which contains them. Excludes scratch tmp/ + regenerable __pycache__, and the
+    git-tracked heaven/tools/ (recoverable). ``..`` is collapsed in _resolve."""
+    resolved = _resolve(operand, cwd)
     try:
         rel = resolved.relative_to(LLM_ROOT)
     except ValueError:
@@ -172,12 +180,17 @@ def _is_protected(operand: str) -> bool:
     parts = rel.parts
     if not parts:
         return True  # rm -rf <llm root>
-    if parts[0] != "projects":
-        return False
-    # under projects/. Skip scratch / regenerable subtrees (allow_tmp_rm owns tmp).
+    # Scratch / regenerable subtrees are never protected (allow_tmp_rm owns tmp).
     if "tmp" in parts or "__pycache__" in parts:
         return False
-    return True
+    if parts[0] == "projects":
+        return True
+    # heaven/: only the gitignored (git-unrecoverable) subtrees. heaven/tools and
+    # other tracked content is git-recoverable → not blocked. The heaven root
+    # itself contains memory/ → protected.
+    if parts[0] == "heaven":
+        return len(parts) == 1 or parts[1] in ("projects", "memory")
+    return False
 
 
 def _git_clean_hits(args):
@@ -244,12 +257,22 @@ def main() -> None:
         return
 
     hits = []
+    cwd = LLM_ROOT  # running shell cwd within this command (in-command `cd` moves it)
     for stmt in _split_statements(cmd):
         verb, args = _verb_and_args(stmt)
         if args is None:
             continue
+        if verb == "cd":
+            # An in-command `cd` retargets subsequent *relative* operands. Only an
+            # explicit operand moves cwd; a bare `cd` (→ $HOME) is left as-is so we
+            # never weaken protection on the conservative default.
+            ops = _operands(args)
+            if ops:
+                t = Path(ops[0])
+                cwd = Path(os.path.normpath(str(t if t.is_absolute() else cwd / t)))
+            continue
         if verb == "rm" and _is_recursive(args):
-            hits.extend(op for op in _operands(args) if _is_protected(op))
+            hits.extend(op for op in _operands(args) if _is_protected(op, cwd))
         elif verb == "git":
             hits.extend(_git_clean_hits(args))
 
@@ -258,7 +281,8 @@ def main() -> None:
 
     targets = ", ".join(dict.fromkeys(hits))  # de-dup, preserve order
     _emit_deny(
-        "復旧不能ツリー(projects/)への破壊操作を停止しました.\n"
+        "復旧不能ツリー(projects/ ・ gitignored な heaven/memory・heaven/projects)への"
+        "破壊操作を停止しました.\n"
         f"対象: {targets}\n\n"
         "`projects/*` は .gitignore 済み(ローカル層・未 commit, snapshot 無し)で、"
         "誤った `rm -r` は git でも何でも復旧できません。"

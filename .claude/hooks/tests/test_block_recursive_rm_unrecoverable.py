@@ -18,24 +18,24 @@ RM = "rm"  # avoid the literal verb+flags sequence appearing pre-assembled
 CASES = [
     ("incident-multiline",
      "cd .\nset -e\n"
-     "git mv projects/mac-remote-desktop projects/mac-access/vnc\n"
-     f"{RM} -rf projects/mac-remote-desktop", True),
+     "git mv projects/example-old projects/example-new\n"
+     f"{RM} -rf projects/example-old", True),
     ("grep-arg-not-rm",
-     'grep -rn "' + RM + ' -rf projects/mac-remote-desktop" *.jsonl', False),
+     'grep -rn "' + RM + ' -rf projects/example-old" *.jsonl', False),
     ("echo-arg-not-rm",
      'echo "would ' + RM + ' -rf projects/foo"', False),
     ("tmp-rm-allowed",
-     f"{RM} -rf projects/maple/tmp/wz_stats", False),
+     f"{RM} -rf projects/example/tmp/data_cache", False),
     ("pycache-allowed",
-     f"{RM} -rf projects/maple/__pycache__", False),
+     f"{RM} -rf projects/example/__pycache__", False),
     ("ack-marker-lifts",
-     f"{RM} -rf projects/mac-remote-desktop  # RM-PROJECTS-OK: verified empty", False),
+     f"{RM} -rf projects/example-old  # RM-PROJECTS-OK: verified empty", False),
     ("mv-and-rm-still-blocked",
      f"git mv projects/old projects/new && {RM} -rf projects/old", True),
     ("projects-root-abs",
      f"{RM} -rf ./projects", True),
     ("single-file-nonrecursive",
-     f"{RM} projects/maple/notes.md", False),
+     f"{RM} projects/example/notes.md", False),
     ("heaven-not-projects",
      f"{RM} -rf heaven/tmp/x", False),
     ("abs-fr-order",
@@ -43,13 +43,32 @@ CASES = [
     ("long-recursive-flag",
      f"{RM} --recursive projects/foo", True),
     ("glob-in-projects",
-     f"{RM} -rf projects/maple/build/*", True),
+     f"{RM} -rf projects/example/build/*", True),
     ("force-only-no-recursive",
-     f"{RM} -f projects/maple/notes.md", False),
+     f"{RM} -f projects/example/notes.md", False),
     ("binpath-rm",
      f"/bin/{RM} -rf projects/foo", True),
     ("sudo-wrapper",
      f"sudo {RM} -rf projects/foo", True),
+    # [2] cwd-aware resolution: a leading `cd` into projects/ makes a *relative*
+    # recursive rm hit the unrecoverable tree (the 2026-06-14 incident vector).
+    ("cd-abs-into-projects-then-rel-rm",
+     "cd ./projects/example\n"
+     f"/bin/{RM} -rf app.bak.20260614", True),
+    ("cd-rel-into-projects-then-rel-rm",
+     f"cd projects/example && {RM} -rf app.bak.20260614", True),
+    ("cd-abs-outside-then-rm-safe",     # cd outside repo → relative rm not in tree
+     f"cd /tmp && {RM} -rf foo", False),
+    # [4] gitignored (git-unrecoverable) heaven/ subtrees: memory 実体 +
+    # creative archive 等。tracked な heaven/tools は復旧可で許可。
+    ("heaven-projects-archive",
+     f"{RM} -rf heaven/projects/sample-archive/data", True),
+    ("heaven-memory",
+     f"{RM} -rf heaven/memory", True),
+    ("heaven-root-contains-memory",
+     f"{RM} -rf heaven", True),
+    ("heaven-tools-tracked-safe",
+     f"{RM} -rf heaven/tools", False),
     # git clean vectors (same unrecoverable class)
     ("git-clean-fdx-whole-repo",
      "git clean -fdx", True),
@@ -60,7 +79,7 @@ CASES = [
     ("git-clean-dry-run-safe",
      "git clean -fdxn", False),          # dry-run never blocks
     ("git-clean-pathspec-projects",
-     "git clean -fdx projects/maple", True),
+     "git clean -fdx projects/example", True),
     ("git-clean-pathspec-heaven-safe",
      "git clean -fdx heaven", False),    # pathspec outside projects/
     ("git-clean-long-force",
