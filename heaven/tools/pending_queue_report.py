@@ -71,8 +71,15 @@ def _obsolete_reason(item):
         return "昇格対象外 target (ルート CLAUDE.md = frame 専用)"
     srcs = item.get("source_memories") or []
     if isinstance(srcs, list) and srcs and MEMORY_DIR.is_dir():
-        missing = [s for s in srcs if isinstance(s, str) and not (MEMORY_DIR / s).exists()]
-        if missing and len(missing) == len([s for s in srcs if isinstance(s, str)]):
+        # memory 実体は `<slug>.md`。キューは slug を `.md` 無しで格納するため、
+        # 素の `(MEMORY_DIR / s)` 照合では実在 memory を全て「不在」と誤判定し
+        # agent-def 等を偽の DROP 候補に挙げていた (2026-06-20 修正)。`.md` 付き /
+        # 既に `.md` を含む slug の双方を在席扱いにする。
+        def _mem_exists(s: str) -> bool:
+            return (MEMORY_DIR / s).exists() or (MEMORY_DIR / f"{s}.md").exists()
+        str_srcs = [s for s in srcs if isinstance(s, str)]
+        missing = [s for s in str_srcs if not _mem_exists(s)]
+        if missing and len(missing) == len(str_srcs):
             return f"source memory 全て不在 ({', '.join(missing[:3])})"
     return None
 
