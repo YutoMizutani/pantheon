@@ -209,6 +209,16 @@ const repro = await agent(reproPrompt, {
   schema: REPRO_SCHEMA,
 })
 
+// agent() は null を返しうる (session limit / API error / rate limit). 未ガード参照を避け
+// phase ごと graceful に落とす (workflow-io-contract #6 / failure-modes-2026-06-19.md ②).
+if (!repro) {
+  return {
+    status: 'agent_null',
+    phase: 'Reproduce',
+    next_action: '再現フェーズの agent が null を返した (session limit / rate limit). 時間を空けて再起動する.',
+  }
+}
+
 // ----- 分岐: unreproducible のとき -----
 if (!repro.reproduced) {
   if (!user_ok_marker) {
@@ -261,6 +271,15 @@ const analysis = await agent(analysisPrompt, {
   phase: 'Analyze',
   schema: ANALYSIS_SCHEMA,
 })
+
+if (!analysis) {
+  return {
+    status: 'agent_null',
+    phase: 'Analyze',
+    next_action: '診断フェーズの agent が null を返した. 時間を空けて再起動する.',
+    repro,
+  }
+}
 
 // ============================================================
 // Phase 3: Fix
@@ -320,6 +339,16 @@ const fix = await agent(fixPrompt, {
   schema: FIX_SCHEMA,
 })
 
+if (!fix) {
+  return {
+    status: 'agent_null',
+    phase: 'Fix',
+    next_action: '修正フェーズの agent が null を返した. 時間を空けて再起動する.',
+    repro,
+    analysis,
+  }
+}
+
 // ============================================================
 // Phase 4: Verify
 // ============================================================
@@ -360,6 +389,17 @@ const verify = await agent(verifyPrompt, {
   phase: 'Verify',
   schema: VERIFY_SCHEMA,
 })
+
+if (!verify) {
+  return {
+    status: 'agent_null',
+    phase: 'Verify',
+    next_action: '検証フェーズの agent が null を返した. 時間を空けて再起動し GREEN を再観測する.',
+    repro,
+    analysis,
+    fix,
+  }
+}
 
 // ============================================================
 // 返却
