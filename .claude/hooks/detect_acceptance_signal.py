@@ -132,8 +132,93 @@ _SYSTEM_USER_PREFIXES = (
     "<command-name>",
 )
 
+# Distinctive opening of the genuine injected reminder (_REMINDER, defined below).
+# The window-boundary detector keys on this FULL phrase — not the bare
+# "AUTO-LEARN-META" word — so that lines merely *quoting* the marker (tool_result
+# from Reading/Editing this hook's source, prose discussion, pasted diffs) do not
+# get mistaken for a real reflection fire. A module-level `assert` after _REMINDER
+# guarantees the two never drift (a silent drift would resurrect the double-fire
+# bug). Keep this string a verbatim prefix of _REMINDER's first directive line.
+_REMINDER_ANCHOR = (
+    "[AUTO-LEARN-META] User acceptance signal detected. "
+    "Run a background meta-improvement reflection"
+)
+
+
 def _is_wakeup_or_system(text: str) -> bool:
     return text.lstrip().startswith(_SYSTEM_USER_PREFIXES)
+
+
+def _line_is_prior_reflection_fire(line: str) -> bool:
+    """True if this transcript line marks a *prior* reflection fire that should
+    close the mining window. Two carriers:
+
+      (a) the auto-injected reminder this hook emits — detected by the raw
+          ``AUTO-LEARN-META`` marker (where it always lands);
+      (b) a *manual* spawn of the self-reflection sub-agent — an assistant
+          ``Agent``/``Task`` tool_use whose input carries
+          ``subagent_type == "self-reflection"``. A hand-launched reflection
+          leaves NO marker, so without (b) the window never advanced past it and
+          the next acceptance signal re-mined the same work in a second, ~costly
+          sub-agent (observed ~96748 wasted subagent_tokens — the double-fire bug
+          this guard closes).
+
+    Direction of the guard is fail-CLOSED: any match here only advances the
+    window start LATER, shrinking the counted window — i.e. it can only make the
+    gate MORE likely to skip, never to double-fire and never to loosen firing.
+    A false match (e.g. the agent-listing reminder mentioning self-reflection in
+    prose) is parsed away by the role/tool_use check below, and even if it
+    slipped through it would merely skip a reflection — the cheap, safe miss."""
+    # (a) the genuine auto-injected reminder. Match the FULL directive opening,
+    # NOT the bare marker word — and exclude anything carried inside a
+    # tool_use/tool_result block. Working ON this hook (Reading/Editing its
+    # source, which literally contains the _REMINDER text, or pasting its diff)
+    # otherwise floods the transcript with the marker string; the old bare
+    # ``"AUTO-LEARN-META" in line`` then matched those quotes and advanced the
+    # window start to the end, collapsing the counted window to ~0 tool_use so
+    # every later acceptance signal got skipped by the cost gate. Self-referential
+    # false-positive observed 2026-06-20 (gate log: 3× "low-activity tool_use=0<4"
+    # right after a session spent editing this very file). Still fail-CLOSED: a
+    # rare miss only over-skips a reflection, never double-fires.
+    if _REMINDER_ANCHOR in line:
+        # A Read of this hook's own source (tool_result) contains the anchor
+        # verbatim too — reject anything inside a tool_use/tool_result block so
+        # only the actually-injected reminder counts as a window boundary.
+        try:
+            _obj = json.loads(line.strip())
+        except (json.JSONDecodeError, ValueError):
+            return True  # not JSON but carries the anchor → treat as the reminder
+        _msg = _obj.get("message") if isinstance(_obj, dict) else None
+        _content = _msg.get("content") if isinstance(_msg, dict) else None
+        if isinstance(_content, list):
+            for _b in _content:
+                if isinstance(_b, dict) and _b.get("type") in ("tool_use", "tool_result"):
+                    return False
+        return True
+    # Cheap reject before JSON-parsing: the spawn line must name the sub-agent.
+    if "self-reflection" not in line:
+        return False
+    try:
+        obj = json.loads(line.strip())
+    except (json.JSONDecodeError, ValueError):
+        return False
+    if not isinstance(obj, dict):
+        return False
+    msg = obj.get("message")
+    if not isinstance(msg, dict) or msg.get("role") != "assistant":
+        return False
+    content = msg.get("content")
+    if not isinstance(content, list):
+        return False
+    for b in content:
+        if not isinstance(b, dict) or b.get("type") != "tool_use":
+            continue
+        if b.get("name") not in ("Agent", "Task"):
+            continue
+        inp = b.get("input")
+        if isinstance(inp, dict) and inp.get("subagent_type") == "self-reflection":
+            return True
+    return False
 
 
 def _gate_features(transcript_path: str) -> dict | None:
@@ -154,13 +239,17 @@ def _gate_features(transcript_path: str) -> dict | None:
         lines = p.read_text(encoding="utf-8").splitlines()
     except OSError:
         return None
-    # Window start = just after the last line that mentions a prior fire. We scan
-    # raw text so it matches regardless of where the injected reminder landed in
-    # the transcript structure. (Shrinking the window here only ever makes us
-    # MORE likely to skip work we already reflected on — the safe direction.)
+    # Window start = just after the last line that marks a prior reflection
+    # fire — either the auto-injected AUTO-LEARN-META reminder OR a manual
+    # self-reflection sub-agent spawn (see _line_is_prior_reflection_fire).
+    # Counting the manual spawn closes the double-fire bug: a hand-launched
+    # reflection leaves no marker, so the window otherwise never advanced and the
+    # next acceptance signal re-mined the same work. (Shrinking the window here
+    # only ever makes us MORE likely to skip work we already reflected on — the
+    # safe direction.)
     start = 0
     for i, line in enumerate(lines):
-        if "AUTO-LEARN-META" in line:
+        if _line_is_prior_reflection_fire(line):
             start = i + 1
     tool_use = 0
     asst_turns = 0
@@ -257,6 +346,15 @@ Spawn the background sub-agent in the same turn as your user-facing response.
 
 (3) inline drain (旧 pending_structural_reviews.json キューの後継 — 2026-06-19 廃止): reflection の完了結果に `ESCALATION: recurrence-despite-memory` ブロックが含まれていたら、**その同じ完了ターンで** root-cause-auditor を inline 起動する (Agent tool, subagent_type: root-cause-auditor, run_in_background: true)。ブロックの target_hint / signal / origin_session をそのまま auditor の prompt に渡す。キューファイルへは一切書かない・読まない。auditor 完了時はその verdict を user に提示し human-gate (採否は user、採った提案だけ pending_hook/claudemd/agent-def 承認キューへ)。ESCALATION ブロックが無ければ (3) は何もしない。
 </system-reminder>"""
+
+# Drift guard: the window-boundary detector (_line_is_prior_reflection_fire)
+# recognizes a prior fire by _REMINDER_ANCHOR. If a future edit changes the
+# reminder's opening so it no longer contains the anchor, boundary detection
+# silently breaks and the double-fire bug returns. Fail loudly at import instead.
+assert _REMINDER_ANCHOR in _REMINDER, (
+    "_REMINDER_ANCHOR must stay a verbatim prefix of _REMINDER's directive line "
+    "(see _line_is_prior_reflection_fire)."
+)
 
 
 def _read_payload() -> dict:

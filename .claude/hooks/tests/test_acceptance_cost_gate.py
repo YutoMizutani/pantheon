@@ -37,6 +37,38 @@ def _tools(n: int) -> list:
     ]
 
 
+def _reflection_spawn() -> list:
+    """An assistant turn that *manually* spawns the self-reflection sub-agent
+    (Agent tool_use, subagent_type=self-reflection) — NO AUTO-LEARN-META marker.
+    The window-boundary scan must treat this as a prior reflection fire, else the
+    work before it gets re-mined by the next acceptance signal (the double-fire
+    bug: ~96748 wasted subagent_tokens)."""
+    return [
+        {"type": "text", "text": "🔍 自己改善リフレクションをバックグラウンド起動"},
+        {
+            "type": "tool_use",
+            "name": "Agent",
+            "input": {"subagent_type": "self-reflection", "prompt": "Inputs: ..."},
+        },
+    ]
+
+
+def _source_quote() -> list:
+    """A tool_result that quotes this hook's own _REMINDER source verbatim — what a
+    Read/Edit of detect_acceptance_signal.py produces. It carries the full
+    AUTO-LEARN-META reminder anchor but is NOT a genuine injection, so it must NOT
+    reset the mining window. Old bare-substring impl treated it as a boundary →
+    editing this hook collapsed the window and skipped every later acceptance
+    signal (self-referential false-positive fixed 2026-06-20)."""
+    return [{
+        "type": "tool_result",
+        "content": (
+            "240\t[AUTO-LEARN-META] User acceptance signal detected. "
+            "Run a background meta-improvement reflection (source quote)."
+        ),
+    }]
+
+
 def _msg(role: str, content) -> str:
     return json.dumps({"message": {"role": role, "content": content}})
 
@@ -65,8 +97,18 @@ def _fired(transcript: str, sid: str, prompt: str = "ok") -> bool:
     return "AUTO-LEARN-META" in proc.stdout
 
 
-# A line simulating a prior reflection injection in the same session.
-_PRIOR_FIRE = _msg("user", _text("<system-reminder>[AUTO-LEARN-META] earlier fire</system-reminder>"))
+# A line simulating a prior reflection injection in the same session. Must use
+# the REAL reminder text — the boundary detector keys on the full directive anchor
+# ("[AUTO-LEARN-META] User acceptance signal detected. Run a background ...") so a
+# line merely mentioning the bare marker no longer counts (2026-06-20 fix).
+_PRIOR_FIRE = _msg(
+    "user",
+    _text(
+        "<system-reminder>\n[AUTO-LEARN-META] User acceptance signal detected. "
+        "Run a background meta-improvement reflection (起動と完了を日本語1行で可視化する).\n"
+        "</system-reminder>"
+    ),
+)
 
 
 def main() -> int:
@@ -108,6 +150,40 @@ def main() -> int:
                 _msg("user", _text("大きいタスク")),
                 _msg("assistant", _tools(10)),
                 _PRIOR_FIRE,
+                _msg("user", _text("小さい追従")),
+                _msg("assistant", _tools(1)),
+            ],
+            False,
+        ),
+        (
+            # [RED→GREEN 2026-06-20] A tool_result that QUOTES this hook's own
+            # source (Read/Edit of detect_acceptance_signal.py) contains the full
+            # reminder anchor verbatim. It must NOT reset the window — otherwise
+            # working on this hook collapses the window to ~0 and skips every later
+            # acceptance signal. Here the genuine boundary is _PRIOR_FIRE; the
+            # source quote after it must be ignored, leaving 8+1 tool_use in-window.
+            "windowed_source_quote_not_boundary_fires",
+            [
+                _msg("user", _text("大きいタスク")),
+                _msg("assistant", _tools(10)),
+                _PRIOR_FIRE,
+                _msg("assistant", _tools(8)),
+                _msg("user", _source_quote()),
+                _msg("user", _text("追従")),
+                _msg("assistant", _tools(1)),
+            ],
+            True,
+        ),
+        (
+            # [RED→GREEN] A *manual* self-reflection spawn (no AUTO-LEARN-META
+            # marker) must close the window just like the injected reminder does.
+            # Old impl advanced the window only on AUTO-LEARN-META, so the big
+            # pre-spawn work stayed in-window and re-fired = double launch.
+            "windowed_manual_reflection_spawn_skips",
+            [
+                _msg("user", _text("大きいタスク")),
+                _msg("assistant", _tools(10)),
+                _msg("assistant", _reflection_spawn()),
                 _msg("user", _text("小さい追従")),
                 _msg("assistant", _tools(1)),
             ],
