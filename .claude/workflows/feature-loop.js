@@ -1,7 +1,7 @@
 /**
  * feature-loop workflow — プロジェクトを破壊せず価値を底上げする改善案(新機能/UX摩擦除去/統合)を
  *   実使用シグナルに根ざして生成する. 無指示 improve ループが test-coverage/重箱の隅に収束する
- *   構造問題への対策 (projects/feature-loop/SCOPE.md が設計記録, reference/usage-signal-contract.md が
+ *   構造問題への対策 (projects/llm/apps/feature-loop/SCOPE.md が設計記録, reference/usage-signal-contract.md が
  *   使用シグナル契約).
  *
  * ==== 設計層 (4 要素) ====
@@ -51,8 +51,8 @@
  *      - observable-signal: budget.spent() / phase 別 token 内訳が /workflows で可視
  *
  * ==== 規範 / hook との関係 ====
- *   対応する規範: CLAUDE.md「プロセス設計フレーム」, projects/feature-loop/CLAUDE.md 設計原則 6 項
- *   対応する記録: projects/feature-loop/reference/usage-signal-contract.md (LIVE/DARK の SSoT)
+ *   対応する規範: CLAUDE.md「プロセス設計フレーム」, projects/llm/apps/feature-loop/CLAUDE.md 設計原則 6 項
+ *   対応する記録: projects/llm/apps/feature-loop/reference/usage-signal-contract.md (LIVE/DARK の SSoT)
  *   役割分担     : 契約 = 何が観測可能かの真実, workflow = それを quota+provenance+judge で価値方向に変換
  */
 
@@ -72,7 +72,7 @@ export const meta = {
 
 // ROOT は args parse 後に env 非依存で導出する (args.root || '.')。下の parsedArgs ブロック参照。
 
-// 使用シグナル契約 (projects/feature-loop/reference/usage-signal-contract.md) の LIVE/DARK 分類.
+// 使用シグナル契約 (projects/llm/apps/feature-loop/reference/usage-signal-contract.md) の LIVE/DARK 分類.
 // Judge が案の grounding を機械照合するための SSoT のミラー. 契約更新時はここも更新する.
 const LIVE_SIGNALS = [
   "lifelog kind='window' per-exe foreground minutes (query_apps_today)",
