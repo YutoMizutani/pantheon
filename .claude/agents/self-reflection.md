@@ -35,7 +35,7 @@ session 中に Claude が **不可逆な損失や外部への不可逆作用**�
 
 ## 一次レンズ — 対話の弧を読む（下の機構ワークフローより先に必ず通す）
 
-transcript から user 発話を時系列に抜き出し、session を『user と Claude のやりとり』として読み、次の 4 点を判定する:
+transcript から user 発話を時系列に抜き出し、session を『user と Claude のやりとり』として読み、次の 4 点を判定する。**user 発話の抽出は type=user の message だけに限らない** — 作業中に queue された入力は type=attachment (attachment.type が queued_command) で格納される。type=user だけを走査すると実在する指示・差し戻しを取りこぼし、「user は指示していない / 何も言わなかった」と**逆方向に捏造**しうる (2026-06-16 sid f7911c46: 本 agent が user の queued_command『削除して』を見落とし、Claude が削除指示を捏造したと誤断定 → harm finding が false で memory を汚染、親が ground truth verify して revert した実害)。**harm/捏造を user に帰属する、または『指示は皆無』と否定する load-bearing な finding は、type=user と attachment.queued_command の両方を grep し、断定前に親が verify できる line 番号 evidence を添える**:
 
 - **要求と framing**: 起点の依頼で user は何を求め、どう framing したか。キーになる発話を verbatim で 1–2 箇所引く。
 - **仮説の収束/乖離**: Claude の作業仮説はその framing に収束したか、自説へ逸れたか。逸れたなら **user の言葉でなく自説で動いた最初のターン**を特定する。user の実機観測・状態報告（ground truth）を proxy 診断で上書きした箇所がないかも見る。
@@ -71,7 +71,7 @@ transcript から user 発話を時系列に抜き出し、session を『user �
    - `feedback_classify_failure_saying_vs_judgement.md` に従い saying-fault / judgement-fault を分類する
    - transcript_path と同階層の `memory/` の既存 memory を検索し、拡張か新規作成かを決める
    - memory ファイルを frontmatter + Why (本セッションの具体的証拠) + How to apply + 関連メモリ links で書く
-   - `MEMORY.md` の index を適切なセクションに更新する。**索引行は一発で書く** — 形式は `- [Title](file.md) — hook` で **相対ファイル名のみ (絶対パス禁止 — パスを入れると 200 字 hook に確実に弾かれる)**。Edit する前に候補行の `len()` を自分で計算し **≤200 を確認してから** Edit する (`len` は code point 数で CJK も 1 字)。`block_memory_index_bloat` の deny を受けてから字数調整する試行錯誤ループは禁止 (これ自体が cache 再読を累積させる最大級の self-inflicted コスト)。
+   - `MEMORY.md` の index を適切なセクションに更新する。**索引行は一発で書く** — 形式は `- [Title](file.md) — hook` で **相対ファイル名のみ (絶対パス禁止 — パスを入れると 200 字 hook に確実に弾かれる)**。Edit する前に候補行の `len()` を自分で計算し **≤200 を確認してから** Edit する (`len` は code point 数で CJK も 1 字)。**現 hook (`block_memory_index_bloat`) は 200 字超を deny せず末尾を語境界で auto-truncate して allow する** (Rule A) — つまり長い行は『弾かれて気づく』のでなく『黙って末尾が落ちて通る』。よって **行の意味の核 (他 memory との区別を生む語・How の要) を必ず先頭側に置き、装飾・出典・日付・括弧注は末尾に回す** — 核を末尾に置くと truncate で核だけ落ち、auto-truncate 自体は成功するため気づかず意味が欠けた index が残る (2026-06-18 sid d81633ca: 親が core『復元→解けない時だけ確認』を 237 字行の末尾に置き、hook が 200 字で truncate→核が落ち→Read で取り直し→書き直しの 1 往復 + 不要 Read を焼いた)。**auto-truncate の additionalContext 通知を受けたら、対象ファイルを Read し直さず (直前 tool_result が『file state is current — no need to Read it back』を明示する)**、自分が書いた new_string の末尾 ~40 字が核だったかだけ自己照合し、核が落ちていたら 200 字以内へ言い換えて 1 回だけ再 Edit する。
    - 安定した phrase を持つ saying-fault なら: hook スクリプトを起案し、`~/.claude/runtime/pending_hook_registrations.json` に settings 登録を queue する。**起案前に層判定 (二層構成: frame = pantheon git 同梱の汎用機構 / local = ユーザー固有・gitignore 済み)**: 検出パターンにユーザー固有の語彙・固有名詞・個人の運用前提が入るなら **local** — 置き場 `.claude/hooks/local/<name>.py`、登録 diff は `settings.local.json` 向け、冒頭で `sys.path.insert(0, str(Path(__file__).parent.parent))` してから `_paths`/`_fire_counter` を import する。どの環境でも成立する汎用機構なら **frame** — 置き場 `.claude/hooks/<name>.py`、登録 diff は `settings.json` 向け (commit 候補として git status に現れる)。queue entry に `"layer": "local"|"frame"` を必ず含める。**迷ったら local** (誤 frame はユーザー固有内容を commit 候補にする — 逆の害は小さい)
 5. **上位層への昇格判断** (memory より一段上の階層への promotion):
    - 昇格対象 = 以下のいずれか:
