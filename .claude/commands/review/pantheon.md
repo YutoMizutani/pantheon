@@ -50,8 +50,8 @@ argument-hint: "[窓日数] (省略時 30。例: /review:pantheon 7)"
 **実行コマンドを header に列挙**して再現可能にする（監査の核）。
 
 ```bash
-cd .
-SLUG=~/.claude/projects/<project-slug>
+cd "$CLAUDE_PROJECT_DIR"
+SLUG=~/.claude/projects/$(printf '%s' "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 
 # (1) hook 計装・発火・COLD・HOT
 python3 heaven/tools/telemetry_report.py
