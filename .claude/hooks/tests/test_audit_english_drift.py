@@ -22,6 +22,20 @@ HOOK = Path(__file__).resolve().parent.parent / "local" / "audit_english_drift_i
 _DRIFT = "Now wire it into the handler and run the full suite again to confirm green output."
 _JA = "ハンドラに配線してテストを再実行しました。"
 
+# [item 2 / 2026-06-20] Conservative marker-gated detection.
+# Technical-narration drift the OLD "≥6 consecutive latin words" threshold MISSES
+# because punctuation / parens / identifiers break the consecutive run below 6:
+#   "Now the regression test passes."        -> 5 consecutive, <6      -> old MISS
+#   "Let me check `x.py` first."             -> stripped to 4 words     -> old MISS
+#   "I'll add a guard, then re-run."         -> comma splits the run    -> old MISS
+# These are exactly the origin drift class (HIT 1/6 measured). The new signal flags
+# a zero-CJK segment that OPENS with an English narration marker (I'll/Now/Let me/…)
+# AND has >=4 total latin words. Conservative (FP-suppression priority, user choice):
+# no opener marker, or <4 words, stays unflagged — see the two control cases below.
+_DRIFT_FRAGMENTED = "Now the regression test passes."  # old MISS, new HIT
+_EN_NO_MARKER = "see config json env value"            # zero-CJK, no opener marker -> stay unflagged
+_EN_MARKER_TOO_SHORT = "Let me see."                   # opener but <4 words -> stay unflagged
+
 
 def _write_transcript(rows: list[dict]) -> str:
     fd, path = tempfile.mkstemp(suffix=".jsonl")
@@ -71,6 +85,48 @@ def main() -> int:
         if not ok:
             failures.append("mid_turn_drift_detected")
 
+        # [RED→GREEN item 2] 断片化した技術ナレーション (句読点が連続語を割る) を
+        # 中盤ターンで検出する。旧「≥6 連続語」閾値は 5 連続語の本例を取りこぼす (RED)。
+        # 新マーカー gate (英文頭 + CJK ゼロ + ≥4 語) で HIT する (GREEN)。
+        t_frag = _write_transcript([
+            _user("最初のタスク"),
+            _asst(_DRIFT_FRAGMENTED),
+            _user("ok"),
+            _asst("完了しました。"),
+        ])
+        code, err = _run(t_frag, "sid-frag", proj)
+        ok = code == 0 and "audit_english_drift" in err
+        print(f"[{'PASS' if ok else 'FAIL'}] fragmented_narration_detected: exit={code} stderr_has_warn={'audit_english_drift' in err}")
+        if not ok:
+            failures.append("fragmented_narration_detected")
+
+        # [control: 保守性] マーカー無しの zero-CJK 英語片 (<6 連続語) は拾わない。
+        # FP 抑制優先 (user 裁定) — 閾値を全体的に下げたのではないことを保証する。
+        t_nomark = _write_transcript([
+            _user("タスク"),
+            _asst(_EN_NO_MARKER),
+            _user("ok"),
+            _asst("完了しました。"),
+        ])
+        code, err = _run(t_nomark, "sid-nomark", proj)
+        ok = code == 0 and "audit_english_drift" not in err
+        print(f"[{'PASS' if ok else 'FAIL'}] no_marker_short_english_not_flagged: exit={code} clean={'audit_english_drift' not in err}")
+        if not ok:
+            failures.append("no_marker_short_english_not_flagged")
+
+        # [control: 保守性] マーカー有りでも <4 語の短片は拾わない (≥4 語 floor)。
+        t_short = _write_transcript([
+            _user("タスク"),
+            _asst(_EN_MARKER_TOO_SHORT),
+            _user("ok"),
+            _asst("完了しました。"),
+        ])
+        code, err = _run(t_short, "sid-short", proj)
+        ok = code == 0 and "audit_english_drift" not in err
+        print(f"[{'PASS' if ok else 'FAIL'}] short_marker_segment_not_flagged: exit={code} clean={'audit_english_drift' not in err}")
+        if not ok:
+            failures.append("short_marker_segment_not_flagged")
+
         # [control] 全ターン日本語 → 警告しない。
         t2 = _write_transcript([
             _user("タスク"),
@@ -92,7 +148,7 @@ def main() -> int:
         if not ok:
             failures.append("dedup_no_rewarn_same_session")
 
-    total = 3
+    total = 6
     passed = total - len(failures)
     print(f"\n{passed}/{total} passed")
     return 1 if failures else 0
