@@ -6,7 +6,7 @@ Failure it prevents
 A frame-layer artifact (committed → pushed to the public repo) that hardcodes
 this operator's home path — e.g. ``/Users/<you>/Developer/llm`` or the derived
 state slug ``-Users-<you>-Developer-llm``. Observed 2026-06-21: a new slash
-command was committed with ``cd .`` and pushed before the
+command was committed with ``cd /Users/you/Developer/llm`` (real home) and pushed before the
 hardcode was caught, so the path landed in public git history (history rewrite
 is the only removal). See ``.claude/rules/common/no-hardcoded-repo-path.md``.
 
@@ -28,8 +28,8 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-HOME = str(Path.home())                                  # e.g. ~
-HOME_SLUG = re.sub(r"[^A-Za-z0-9]", "-", HOME)           # e.g. <project-slug>  (state-dir slug form)
+HOME = str(Path.home())                                  # e.g. /Users/you
+HOME_SLUG = re.sub(r"[^A-Za-z0-9]", "-", HOME)           # e.g. -Users-you  (state-dir slug form)
 
 # Each needle is matched as a fixed string against tracked files only.
 NEEDLES = [HOME, HOME_SLUG]
