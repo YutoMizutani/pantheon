@@ -17,8 +17,11 @@ projects/<name>/
 ├── logs/            # 思考過程・中間メモ（yyyyMMdd 形式のサブディレクトリに配置）
 ├── outputs/         # 最終成果物（後から参照する前提のアウトプット）
 ├── reference/       # 再利用する根拠データ・参考文献
-└── tmp/             # 一時ファイル（削除前提）
+├── tmp/             # 一時ファイル（削除前提）
+└── .local/          # この環境固有の実行時状態・データ（gitignored・任意）。sqlite/pid/cache/秘匿。env 固有で移植しない
 ```
+
+> 命名規約: **`.local/` ＝この階層の gitignored ローカル層**。repo ルートの `.local/` が harness 設定の集約先なのと同じ規約を、各プロジェクトの実行時状態にも使う（旧来の `local/` や散在を避ける）。
 
 ### `apps/` 規約（アプリは常に `apps/<app-name>/`）
 
@@ -39,6 +42,8 @@ projects/<name>/
 ## git の扱い
 
 新規 `projects/<name>/` は**ローカル層が既定**（親リポジトリの `.gitignore` が `/projects/*` を ignore）。親 repo に commit されないので、コード資産を持つプロジェクトは `projects/<name>` 単位で独自に git 管理してよい。プロジェクトを親 repo で公開したい場合のみ、自分の fork の `.gitignore` に `!/projects/<name>/` を追記する。
+
+プロジェクトを公開・git 管理する場合でも、**実行時状態・キャッシュ・秘匿データは `projects/<name>/.local/`（gitignored）に置く** — env 固有で移植・公開しないものの単一の置き場（上記命名規約）。プロジェクト独自 repo を切る際もこの dir は ignore する。
 
 ## ルールの適用条件
 

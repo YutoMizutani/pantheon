@@ -21,10 +21,18 @@
 !/CLAUDE.local.md.example
 !/README.md
 !/LICENSE
+!/.local/
 !/.claude/
 !/docs/
 !/heaven/
 !/projects/
+
+# --- .local/: ローカル層をこの 1 フォルダに集約 (移植の 1 単位)。README anchor だけ frame ---
+#     gitignored だと新規 clone で存在に気づけないので、README.md だけ track して
+#     「あなた固有の設定はここに集まる」という単一の目印を clone に見せる。
+#     中の実体 (CLAUDE.local.md / settings.local.json / memory 等) はローカルのまま。
+/.local/*
+!/.local/README.md
 
 # --- .claude/: 配線とフレーム拡張は track、個人設定と実行時状態はローカル ---
 /.claude/settings.local.json*

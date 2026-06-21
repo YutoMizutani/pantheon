@@ -18,6 +18,8 @@
 - **フレーム層**（git 管理）: どの環境でも*再生できる*機構（移植時に較正を要する）— ルーティング規約・hook・計器・docs・テンプレート。コピーで即動くのではなく、原環境の較正値（パス・語彙・定数）は移植先で校正し直す。運べるのは機構であって、原環境に較正された規範そのものではない。
 - **ローカル層**（gitignore 済み）: この環境のユーザーに固有の人格・状態 — プロジェクト一覧、ユーザー固有の原則、memory 実体、`settings.local.json`。
 
+ローカル層の**実体は repo ルートの `.local/` に集約**する（`CLAUDE.local.md` / `PROJECTS.md` / `settings.local.json` / `hooks/` / memory）。harness が固定パスで読む箇所（root の `CLAUDE.local.md`・`.claude/settings.local.json`・`.claude/hooks/local/*` 等）へは `.local/` から **symlink** を張る。これで「自分のルール一式」が 1 フォルダ＝**移植の 1 単位**になる（張り直しは `heaven/tools/relink-local.sh`）。`.local/` 自体は gitignored だが `.local/README.md` **だけ tracked** で、新規 clone に「ユーザー固有設定はここ」という唯一の目印を見せる。命名規約は **`.local/` ＝この階層の gitignored ローカル層**（root は config、各 `projects/<name>/.local/` は env 固有の実行時状態で、移植しない）。
+
 原則は **1 パス 1 オーナー**: どのファイルもどちらか一方にだけ属する。ユーザー固有の内容（固有名詞・個人の運用規則・プロジェクト一覧）はこの `CLAUDE.md` に書かず、ローカル層の `CLAUDE.local.md` に書く。次の 1 行が毎セッションそれを読み込む（ファイルが無い間は読み込まれないだけ — 初回セットアップで作成する）:
 
 @CLAUDE.local.md
@@ -52,12 +54,14 @@
 
 ユーザーから「セットアップして」と**明示的に依頼されたときにのみ**、**ユーザーにコマンドを依頼せず自分で**以下を行う（slug = プロジェクト絶対パスの非英数字を `-` 置換。`~/.claude/projects/<slug>/memory` をこのリポジトリの `heaven/memory/` への symlink にする）。**未 setup に気づいても自発的に setup を提案・開始しない** — clone 直後の既定は「黙っている」が正しく、能動的な整備は明示依頼で起動する:
 
-1. `CLAUDE.local.md` が無ければ `CLAUDE.local.md.example` からコピーして作成し、ユーザーの運用方針を聞き取りながら「全体方針」「応答スタイル」を埋める（ローカル層 — commit しない）
-2. slug を導出し、`~/.claude/projects/<slug>/memory` の現状を `ls -ld` で検査する
-3. 実ディレクトリとして既存 memory がある場合は、中身を `heaven/memory/` へ移してから置き換える（上書き・破棄をしない。既存の `MEMORY.md` index がある場合はそれを正とする）。既存 memory が無く `heaven/memory/MEMORY.md` も無い場合は、`# Memory Index` 見出しと「1 memory = 1 ファイル、index には 1 行ポインタのみ（形式: `- [タイトル](ファイル名.md) — 要点 1 行`）」の規約コメントだけを持つ最小 index を生成して seed にする
-4. `ln -s "<このリポジトリの絶対パス>/heaven/memory" ~/.claude/projects/<slug>/memory` を張る
-5. `.claude/hooks/local/signals.json` が無ければ作る（自己改善ループの acceptance/correction 検出の語彙 — 完全 opt-in なので、これが無いと「完了」「訂正」シグナルで一切発火しない）。ユーザーに「タスク完了をどう言うか（例: ok / 完了 / done）」「Claude を訂正するときの言い回し」を**聞き取って**埋めるのが既定。手早く済ませたいなら `.claude/hooks/local/signals.json.example`（原環境較正済みの日本語パック）をコピーして出発点にしてよい。スキーマと較正手順は [docs/self-improvement-loop.md](docs/self-improvement-loop.md)「シグナル語彙の較正」。ローカル層 — commit しない
-6. symlink の解決先と両側のファイル件数一致、および `signals.json` の有無を verify し、結果を 1 行で報告する
+1. `.local/` を作り、`.local/CLAUDE.local.md` が無ければ `CLAUDE.local.md.example` からコピーして作成。ユーザーの運用方針を聞き取りながら「全体方針」「応答スタイル」を埋める（ローカル層 — commit しない）
+2. `.local/hooks/signals.json` が無ければ作る（自己改善ループの acceptance/correction 検出の語彙 — 完全 opt-in なので、これが無いと「完了」「訂正」シグナルで一切発火しない）。ユーザーに「タスク完了をどう言うか（例: ok / 完了 / done）」「Claude を訂正するときの言い回し」を**聞き取って**埋めるのが既定。手早く済ませたいなら `.claude/hooks/local/signals.json.example`（原環境較正済みの日本語パック）をコピーして出発点にしてよい。スキーマと較正手順は [docs/self-improvement-loop.md](docs/self-improvement-loop.md)「シグナル語彙の較正」
+3. slug を導出し、`~/.claude/projects/<slug>/memory` の現状を `ls -ld` で検査する
+4. 実ディレクトリとして既存 memory がある場合は、中身を `heaven/memory/` へ移してから置き換える（上書き・破棄をしない。既存の `MEMORY.md` index がある場合はそれを正とする）。既存 memory が無く `heaven/memory/MEMORY.md` も無い場合は、`# Memory Index` 見出しと「1 memory = 1 ファイル、index には 1 行ポインタのみ（形式: `- [タイトル](ファイル名.md) — 要点 1 行`）」の規約コメントだけを持つ最小 index を生成して seed にする
+5. `bash heaven/tools/relink-local.sh` を実行 — harness 期待パスへの symlink を一括生成する（root の `CLAUDE.local.md`・`PROJECTS.md`・`.claude/settings.local.json`・`.claude/hooks/local/*`・`.local/memory`、および `~/.claude/projects/<slug>/memory` → `heaven/memory`）。symlink はパス文字列を保持するだけなので、初期化・移植のたびに張り直す
+6. symlink が全て解決すること・memory 両側のファイル件数一致・`signals.json` の有無を verify し、結果を 1 行で報告する
+
+> **別マシンへ移植するとき**（既存の `.local/` を丸ごと運ぶ場合）: clone → 旧環境の `.local/` を配置 → `bash heaven/tools/relink-local.sh` → verify。手順の詳細は `.local/README.md`。
 
 ---
 
