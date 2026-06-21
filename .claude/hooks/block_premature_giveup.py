@@ -51,6 +51,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+from _paths import PROJECT_DIR  # noqa: E402  env-derived repo root (no hardcoded user path)
 try:
     from _fire_counter import record_fire  # noqa: E402
 except Exception:  # pragma: no cover - telemetry best-effort
@@ -139,8 +140,9 @@ _USER_ANGER = re.compile(
     r"|クソ|くそ|ボケ|ぼけ|何(?:やって|して)(?:ん|る)"
 )
 
-_AUDIT_LOG = Path(
-    "./projects/discord/apps/session-bridge/runtime/block_premature_giveup_audit.log"
+_AUDIT_LOG = (
+    PROJECT_DIR
+    / "projects/discord/apps/session-bridge/runtime/block_premature_giveup_audit.log"
 )
 _MEMORY_SLUG = "feedback_attempt_before_declaring_impossible"
 _CATEGORY = "premature_giveup"

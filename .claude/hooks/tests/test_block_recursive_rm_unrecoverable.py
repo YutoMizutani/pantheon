@@ -9,15 +9,17 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                     "block_recursive_rm_unrecoverable.py")
 RM = "rm"  # avoid the literal verb+flags sequence appearing pre-assembled
+LLM = str(Path(__file__).resolve().parents[3])  # repo root (env-derived, no hardcoded user path)
 
 # (label, command, expect_deny)
 CASES = [
     ("incident-multiline",
-     "cd .\nset -e\n"
+     f"cd {LLM}\nset -e\n"
      "git mv projects/example-old projects/example-new\n"
      f"{RM} -rf projects/example-old", True),
     ("grep-arg-not-rm",
@@ -33,13 +35,13 @@ CASES = [
     ("mv-and-rm-still-blocked",
      f"git mv projects/old projects/new && {RM} -rf projects/old", True),
     ("projects-root-abs",
-     f"{RM} -rf ./projects", True),
+     f"{RM} -rf {LLM}/projects", True),
     ("single-file-nonrecursive",
      f"{RM} projects/example/notes.md", False),
     ("heaven-not-projects",
      f"{RM} -rf heaven/tmp/x", False),
     ("abs-fr-order",
-     f"{RM} -fr ./projects/foo", True),
+     f"{RM} -fr {LLM}/projects/foo", True),
     ("long-recursive-flag",
      f"{RM} --recursive projects/foo", True),
     ("glob-in-projects",
@@ -53,7 +55,7 @@ CASES = [
     # [2] cwd-aware resolution: a leading `cd` into projects/ makes a *relative*
     # recursive rm hit the unrecoverable tree (the 2026-06-14 incident vector).
     ("cd-abs-into-projects-then-rel-rm",
-     "cd ./projects/example\n"
+     f"cd {LLM}/projects/example\n"
      f"/bin/{RM} -rf app.bak.20260614", True),
     ("cd-rel-into-projects-then-rel-rm",
      f"cd projects/example && {RM} -rf app.bak.20260614", True),
@@ -91,8 +93,11 @@ CASES = [
 
 def run(cmd):
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}})
+    # Pin the hook's repo root to LLM so cases stay deterministic regardless of the
+    # ambient CLAUDE_PROJECT_DIR / cwd (the hook derives LLM_ROOT from this env var).
+    env = {**os.environ, "CLAUDE_PROJECT_DIR": LLM}
     p = subprocess.run([sys.executable, HOOK], input=payload,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=env)
     return '"deny"' in p.stdout
 
 

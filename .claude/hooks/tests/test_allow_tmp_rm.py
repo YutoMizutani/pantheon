@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 HOOK = Path(__file__).resolve().parent.parent / "allow_tmp_rm.py"
-LLM = "."
+LLM = str(Path(__file__).resolve().parents[3])  # repo root (env-derived, no hardcoded user path)
 
 
 def emits_allow(command: str, cwd=None) -> bool:
