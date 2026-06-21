@@ -37,16 +37,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/propose_claudemd_updates.py\""
-          }
-        ]
-      }
     ]
   }
 }

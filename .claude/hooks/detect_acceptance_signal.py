@@ -153,8 +153,11 @@ def _line_is_prior_reflection_fire(line: str) -> bool:
     """True if this transcript line marks a *prior* reflection fire that should
     close the mining window. Two carriers:
 
-      (a) the auto-injected reminder this hook emits — detected by the raw
-          ``AUTO-LEARN-META`` marker (where it always lands);
+      (a) the auto-injected reminder this hook emits — detected by the FULL
+          ``_REMINDER_ANCHOR`` directive phrase (not the bare ``AUTO-LEARN-META``
+          word) and only when NOT carried inside a tool_use/tool_result block, so
+          a Read/Edit/diff of this hook's own source that quotes the reminder
+          verbatim does not get mistaken for a genuine fire;
       (b) a *manual* spawn of the self-reflection sub-agent — an assistant
           ``Agent``/``Task`` tool_use whose input carries
           ``subagent_type == "self-reflection"``. A hand-launched reflection
@@ -344,7 +347,7 @@ Spawn the background sub-agent in the same turn as your user-facing response.
 
 可視性 (silent 運用は廃止済み): 完全サイレントにはしない。(1) 起動した同じ応答の末尾に日本語で1行だけ通知する — 例「🔍 自己改善リフレクションをバックグラウンド起動（完了時に結果を1行で出す）」。(2) この background エージェントの完了通知 (task-notification) を受け取ったターンで、結果を日本語1行に圧縮して出す — 例「✅ リフレクション完了: <memory N件更新 / no-action: 理由>」。reflection 内部の思考や全文はチャットに出さず、必ず1行ダイジェストに留める。
 
-(3) inline drain (旧 pending_structural_reviews.json キューの後継 — 2026-06-19 廃止): reflection の完了結果に `ESCALATION: recurrence-despite-memory` ブロックが含まれていたら、**その同じ完了ターンで** root-cause-auditor を inline 起動する (Agent tool, subagent_type: root-cause-auditor, run_in_background: true)。ブロックの target_hint / signal / origin_session をそのまま auditor の prompt に渡す。キューファイルへは一切書かない・読まない。auditor 完了時はその verdict を user に提示し human-gate (採否は user、採った提案だけ pending_hook/claudemd/agent-def 承認キューへ)。ESCALATION ブロックが無ければ (3) は何もしない。
+(3) 提案の in-session 決着 (永続キュー全廃 — 2026-06-20 user 裁定): self-reflection / root-cause-auditor が返す提案 (memory 直書き以外＝ hook 登録 / CLAUDE.md 昇格 / agent-def 昇格) は **絶対にキューファイルへ書かない・読まない** (pending_hook_registrations / pending_claudemd_updates / pending_agent_def_updates は退役)。親が **この同じセッション内で** user に提示し、user が承認したものだけを **親が同セッション内で適用する**。未承認のままセッションが閉じたら **却下** 扱いで次セッション等へ残さない。human-gate は維持 — 適用前に必ず user の明示承認 (承認の場が「永続キューの後日一括レビュー」から「in-session 確認」へ移るだけ。reflection/auditor が直接 CLAUDE.md/hook/settings を書かない安全ゲートは不変)。reflection の完了結果に `ESCALATION: recurrence-despite-memory` ブロックが含まれていたら、**その同じ完了ターンで** root-cause-auditor を inline 起動する (Agent tool, subagent_type: root-cause-auditor, run_in_background: true)。ブロックの target_hint / signal / origin_session をそのまま auditor の prompt に渡す。auditor の verdict も同じく in-session で user に提示し、採った提案だけを親がその場で適用する。ESCALATION ブロックが無ければ inline 起動はしない。
 </system-reminder>"""
 
 # Drift guard: the window-boundary detector (_line_is_prior_reflection_fire)
