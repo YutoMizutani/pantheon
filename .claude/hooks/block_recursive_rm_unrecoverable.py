@@ -70,7 +70,9 @@ except Exception:  # telemetry is best-effort; never break the hook
     def record_fire(*_a, **_k):  # type: ignore
         return
 
-LLM_ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR") or ".").resolve()
+from _paths import PROJECT_DIR  # noqa: E402  env-derived repo root (no hardcoded user path)
+
+LLM_ROOT = PROJECT_DIR.resolve()
 PROJECTS_ROOT = LLM_ROOT / "projects"
 ACK_MARKER = "# RM-PROJECTS-OK:"
 # Prefixes that may legitimately precede the command verb in a statement.
