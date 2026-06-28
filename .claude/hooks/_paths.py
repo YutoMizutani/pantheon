@@ -11,6 +11,11 @@ from pathlib import Path
 
 PROJECT_DIR = Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()))
 
+# PROJECT_DIR を symlink 解決した正準形 (リポジトリ名 = pantheon に揃えた名前)。rm 系
+# ガードが実パスを relative_to で相対化するのに使う — 各 hook で再宣言せずここから import
+# する (no-hardcoded-repo-path 規約: ルートを各ファイルで再定義しない)。
+PANTHEON_ROOT = PROJECT_DIR.resolve()
+
 
 def _slug(p) -> str:
     return re.sub(r"[^A-Za-z0-9]", "-", str(p))
