@@ -13,7 +13,11 @@ Gate (cheap, no LLM):
   - FIRE otherwise; FAIL OPEN (fire) if the transcript is unreadable.
 
 The hook emits the reminder (containing "AUTO-LEARN-META") on stdout when it
-fires, and nothing when it gates. We assert fire/skip by stdout presence.
+fires. When a gate suppresses a matched signal it now emits a distinct
+[SELF-IMPROVE-SKIP] notice instead (user request 2026-06-22) — which does NOT
+contain "AUTO-LEARN-META", so fire-detection on that substring still reads a
+gated signal as no-fire. We assert fire/skip by stdout presence and, separately,
+that the skip notice + a human reason are surfaced on the gated paths.
 """
 from __future__ import annotations
 
@@ -80,7 +84,8 @@ def _write_transcript(lines: list[str]) -> str:
     return path
 
 
-def _fired(transcript: str, sid: str, prompt: str = "ok") -> bool:
+def _run(transcript: str, sid: str, prompt: str = "ok") -> str:
+    """Run the hook once and return its stdout (the injected reminder, if any)."""
     env = dict(os.environ)
     # Hermetic: a non-empty real correction queue would bypass the gate.
     env["CLAUDE_CORRECTION_QUEUE"] = f"/tmp/test_gate_empty_queue_{os.getpid()}.json"
@@ -94,7 +99,11 @@ def _fired(transcript: str, sid: str, prompt: str = "ok") -> bool:
         timeout=20,
         env=env,
     )
-    return "AUTO-LEARN-META" in proc.stdout
+    return proc.stdout
+
+
+def _fired(transcript: str, sid: str, prompt: str = "ok") -> bool:
+    return "AUTO-LEARN-META" in _run(transcript, sid, prompt)
 
 
 # A line simulating a prior reflection injection in the same session. Must use
@@ -215,6 +224,42 @@ def main() -> int:
             failures.append(name)
         print(f"  [{status}] {name}: expected_fire={expected} got_fire={got}")
 
+    # --- skip-notice surfacing (user request 2026-06-22) ------------------
+    # A gated acceptance signal must no longer be silent. Assert the
+    # [SELF-IMPROVE-SKIP] marker + a human reason fragment appear on the gated
+    # paths (cost gate, debounce) and are ABSENT on the fire path.
+    def _check(name: str, cond: bool) -> None:
+        status = "ok" if cond else "FAIL"
+        if not cond:
+            failures.append(name)
+        print(f"  [{status}] {name}")
+
+    low_tx = _write_transcript([_msg("user", _text("これ何?")), _msg("assistant", _tools(1))])
+    tmp_paths.append(low_tx)
+    low_out = _run(low_tx, f"test-gate-{pid}-skip-low")
+    _check("cost_gate_skip_emits_notice",
+           "[SELF-IMPROVE-SKIP]" in low_out and "作業量" in low_out)
+
+    fire_tx = _write_transcript([_msg("user", _text("実装して")), _msg("assistant", _tools(6))])
+    tmp_paths.append(fire_tx)
+    fire_out = _run(fire_tx, f"test-gate-{pid}-skip-fire")
+    _check("fire_path_emits_no_skip_notice", "[SELF-IMPROVE-SKIP]" not in fire_out)
+
+    # Debounce: same session + fire-eligible window, two signals within cooldown.
+    # First fires; the second must surface the skip notice with the cooldown reason.
+    db_tx = _write_transcript([_msg("user", _text("大きいタスク")), _msg("assistant", _tools(8))])
+    tmp_paths.append(db_tx)
+    db_sid = f"test-gate-{pid}-skip-debounce"
+    db_first = _run(db_tx, db_sid)
+    db_second = _run(db_tx, db_sid)
+    _check("debounce_first_fires", "AUTO-LEARN-META" in db_first)
+    _check("debounce_second_emits_notice",
+           "[SELF-IMPROVE-SKIP]" in db_second and "クールダウン" in db_second)
+    try:
+        Path(f"/tmp/claude_acceptance_signal_last_{db_sid}.txt").unlink(missing_ok=True)
+    except OSError:
+        pass
+
     for p in tmp_paths:
         try:
             os.unlink(p)
@@ -224,7 +269,7 @@ def main() -> int:
     if failures:
         print(f"\n{len(failures)} FAILED: {failures}")
         return 1
-    print(f"\nall {len(cases)} passed")
+    print("\nall passed")
     return 0
 
 
