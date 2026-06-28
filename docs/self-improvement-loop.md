@@ -13,7 +13,8 @@
         └─ 親が background reflection subagent を spawn ＝唯一の memory 書き込みゲート
               transcript を読み、失敗を分類 (saying-fault / judgement-fault / hybrid)
               → memory ファイルを書く (+ saying-fault なら hook を起案)
-              → hook の settings 登録は直接編集せず pending キューへ (人間が一括レビュー)
+              → memory が *手順* 型なら skill (.claude/commands) を起案 (正極性弁・PROPOSAL)
+              → hook 登録・上位層昇格・skill は直接編集せず PROPOSAL ブロックで親へ返す (in-session で user 承認後に親が適用・永続キュー不使用)
   ▼
 規範が 3 層に定着
   │   CLAUDE.md (毎ターンの prior) / memory (長期記憶) / hook (決定論的 enforce)
@@ -52,7 +53,7 @@ memory の参照も記録 ── touch_memory_on_read.py → telemetry/memory_to
 
 補完する 2 系統（どちらも同梱・配線済み）:
 
-- **detect_acceptance_signal.py** — 「ok / 完了」等の**完全一致**でのみ発火し、META reflection を起動する（どの語が acceptance かは較正値 — 下記「シグナル語彙の較正」）。訂正シグナルだけでは「ユーザーがわざわざ指摘した失敗」しか学べない、という非対称への手当て。完全一致トリガなので observe モード不要で運用できる。**責務はシグナル検出と起動のみ** — 振り返りの方針（一次レンズ・採掘 category・ワークフロー・layer 判定）は `.claude/agents/self-reflection.md`（frame 層エージェント定義）に分離してあり、hook は session_id / transcript / 訂正キューの**動的入力だけ**を渡して spawn する。エージェントは各セッションを**まず危害・不可逆性レンズでゲートし**（バックアップの無い user データの破壊・外部への不可逆作用があれば対話・効率より優先し、踏んだ正確なコマンドを gate=hook 等に食わせて block を実テスト確認する）、次に**『user と Claude の対話』として一次レンズで読み**（user の framing に Claude が収束したか乖離したか／同趣旨の言い直し・差し戻しの反復）、最後に効率・プロセスの採掘 category（冗長手順・避けられた往復・遅すぎた診断 等）を**三次軸**として回す。順序は固定（危害・不可逆性 → 対話 → 効率）。重心を危害と対話理解に置くのは、効率採掘へ偏った reflection が「不可逆な破壊」や「user が正しく言い続けたのに自説で動き続けた」型の最重要失敗を構造的に取りこぼしたため。なお prompt 自体に根がある fault（reflection 自身の優先順位を含む）は memory でなく **agent 定義の昇格**（`PROPOSAL:` ブロックで親へ返す・強化方向のみ・in-session で user 承認後に親が適用）で直す。
+- **detect_acceptance_signal.py** — 「ok / 完了」等の**完全一致**でのみ発火し、META reflection を起動する（どの語が acceptance かは較正値 — 下記「シグナル語彙の較正」）。訂正シグナルだけでは「ユーザーがわざわざ指摘した失敗」しか学べない、という非対称への手当て。完全一致トリガなので observe モード不要で運用できる。**責務はシグナル検出と起動のみ** — 振り返りの方針（一次レンズ・採掘 category・ワークフロー・layer 判定）は `.claude/agents/self-reflection.md`（frame 層エージェント定義）に分離してあり、hook は session_id / transcript の**動的入力だけ**を渡して spawn する（訂正キューは 2026-06-17 退役）。エージェントは各セッションを**まず危害・不可逆性レンズでゲートし**（バックアップの無い user データの破壊・外部への不可逆作用があれば対話・効率より優先し、踏んだ正確なコマンドを gate=hook 等に食わせて block を実テスト確認する）、次に**『user と Claude の対話』として一次レンズで読み**（user の framing に Claude が収束したか乖離したか／同趣旨の言い直し・差し戻しの反復）、最後に効率・プロセスの採掘 category（冗長手順・避けられた往復・遅すぎた診断 等）を**三次軸**として回す。順序は固定（危害・不可逆性 → 対話 → 効率）。重心を危害と対話理解に置くのは、効率採掘へ偏った reflection が「不可逆な破壊」や「user が正しく言い続けたのに自説で動き続けた」型の最重要失敗を構造的に取りこぼしたため。なお prompt 自体に根がある fault（reflection 自身の優先順位を含む）は memory でなく **agent 定義の昇格**（`PROPOSAL:` ブロックで親へ返す・強化方向のみ・in-session で user 承認後に親が適用）で直す。
 - ~~**propose_claudemd_updates.py**~~ — **退役（2026-06-20 user 裁定）**。Stop（セッション終了時）発火で in-session の user 確認ができず、永続キューに規範化候補を貯める設計だったため、永続キュー全廃と同時に settings 登録を外した。規範化候補は self-reflection が `PROPOSAL:` ブロックで親へ返し in-session で決着させる経路に一本化。
 
 ## 反省/監査の三系統と escalation 弁（加算だけにしない）
@@ -96,7 +97,7 @@ failure を観測したら **saying-fault**（特定の言い回し・パター�
 - **measure-first**: 常時計測 (hook) を足すのは「silent かつ costly な失敗」だけ。loud で rare で安い失敗には訂正時の memory tag で十分。recipes の採用判断にも同じゲートを使う。
 - **generalize-on-recurrence**: 再発したら narrow な新規規範を足すのではなく、既存規範を一般化する。
 - **observe モード 1 日**: 新 hook は block でなく audit (観測のみ) で 1 日走らせ、false positive を見てから blocking に昇格する。即 block 化した hook は翌日 disable される、というのが原環境実測の教訓。
-- **登録は人間ゲート経由**: reflection subagent は settings.json を直接編集せず、登録案を pending キューに積む。
+- **登録は人間ゲート経由**: reflection subagent は settings.json を直接編集せず、登録案を `PROPOSAL:` ブロックで親へ返す（親が in-session で user 承認を得てから適用・永続キュー不使用）。
 
 ## 成果物の層ルーティング（二層構成との整合）
 
@@ -108,6 +109,7 @@ failure を観測したら **saying-fault**（特定の言い回し・パター�
 | telemetry / queue | `~/.claude/projects/<slug>/telemetry/`・`~/.claude/runtime/` | repo 外 | 構造（リポジトリの外） |
 | hook（saying-fault） | frame: `.claude/hooks/` + `settings.json` / local: `.claude/hooks/local/` + `settings.local.json` | 起案時に reflection が層判定 | 構造（`local/` は gitignore）+ 登録 queue の `layer` フィールド |
 | 上位層への昇格（規範の promotion） | project 固有 → `projects/<X>/CLAUDE.md`・横断×ユーザー固有 → `CLAUDE.local.md`・横断×環境汎用 → `.claude/rules/common/`・**prompt 由来 → agent 定義 `.claude/agents/<name>.md`（reflection 自身を含む）** | target から導出 | 人間ゲート（queue 経由のみ）+ ルート `CLAUDE.md` は対象外。**agent-def 昇格は強化方向のみ — ループ自身の安全ガード（propose-only/queue/危害レンズ/破壊系 hook）を緩める提案は禁止（HARD BLOCK / Self-Modification）** |
+| skill 結晶化（**手順型 memory の昇格**・正極性弁） | `.claude/commands/<name>.md`（+ optional `.claude/workflows/<name>.js`） | 起案時に reflection が層判定（迷ったら local） | 人間ゲート + **採用前に empirical-prompt-tuning で検証（`未検証 N=1`）** + **未使用は skill_gc が archive ＝ birth ⇄ death 対称**。規範型 memory は対象外（skill は能動 invoke を待てず死ぬ）。設計: [design-skill-promotion-lane.md](design-skill-promotion-lane.md)。front-load/recovery の design-doc 駆動な実例（外部起点 v0）: `model-first` / `restart`（[design-model-first-and-restart.md](design-model-first-and-restart.md)） |
 
 ルート `CLAUDE.md` はルーティングと機構の説明だけを持つフレーム層であり、ループの昇格 target にならない。回帰テストは [.claude/hooks/tests/test_layer_routing.py](../.claude/hooks/tests/test_layer_routing.py)。
 
@@ -123,7 +125,7 @@ failure を観測したら **saying-fault**（特定の言い回し・パター�
 
 **完全 opt-in（重要）**: デフォルト語彙は空で、`signals.json` が無い間は acceptance / correction の検出が**一切発火しない**。これは意図的 — 「ok」のような語ですら意味は環境依存（ここでは reflection 予約語、別環境では単なる承認）で、フレーム層が決め打ちで発火させると意味衝突と costly な誤起動（acceptance は背景サブエージェント spawn）を生むため。**起動の入口は 2 つ**:
 
-- **初回セットアップ**（doc を読まないユーザー向けの主経路）: ルート `CLAUDE.md`「初回セットアップ」節の step 5 で、エージェントが「完了/訂正をどう言うか」を聞き取って `signals.json` を作る。「セットアップして」の一言で語彙が入る。
+- **初回セットアップ**（doc を読まないユーザー向けの主経路）: ルート `CLAUDE.md`「初回セットアップ」節の step 2 で、エージェントが「完了/訂正をどう言うか」を聞き取って `signals.json` を作る。「セットアップして」の一言で語彙が入る。
 - **example のコピー**: `cp .claude/hooks/local/signals.json.example .claude/hooks/local/signals.json` で原環境較正済みパックから出発し、自分の語彙に調整する。
 
 env `FRAME_SIGNALS_FILE` で読み込み先を差し替えられる（テストの hermetic 化用）。

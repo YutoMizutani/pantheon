@@ -16,6 +16,9 @@
      agent 定義に在り、hook はそこへ委譲する」を固定する (single owner per path)。
   4. telemetry_report: 棚卸しの enumeration が .claude/hooks/local/*.py も拾う
      (local 層 hook が cold-hook 監査から漏れない)。
+  5. skill-promotion lane (正極性弁): 手順型 memory → .claude/commands skill の昇格
+     policy が agent 定義に在る (kind=skill enum / command target / skill_gc 対称)。
+     規範型 memory は対象外。設計: docs/design-skill-promotion-lane.md。
 """
 from __future__ import annotations
 
@@ -94,6 +97,13 @@ def main() -> int:
         "agent_def_local_hooks_register_in_settings_local",
         "settings.local.json" in agent_def,
     )
+
+    # skill-promotion lane (正極性弁・2026-06-22): 手順型 memory → .claude/commands skill。
+    # 規範型 memory は対象外。policy 本文の単一オーナーは agent 定義 (memory/hook と同様に
+    # single owner per path を固定する。設計: docs/design-skill-promotion-lane.md)。
+    check("agent_def_offers_skill_kind", "agent-def|skill" in agent_def)
+    check("agent_def_routes_skill_to_commands", ".claude/commands/" in agent_def)
+    check("agent_def_skill_birth_death_symmetry", "skill_gc" in agent_def)
 
     # hook 側はポリシーを inline せず agent 定義へ委譲する (acceptance reminder)。
     # 注: 旧 _corrections_block (global correction queue) は 29ccbf4 で廃止され、
