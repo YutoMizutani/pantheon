@@ -36,6 +36,16 @@ _DRIFT_FRAGMENTED = "Now the regression test passes."  # old MISS, new HIT
 _EN_NO_MARKER = "see config json env value"            # zero-CJK, no opener marker -> stay unflagged
 _EN_MARKER_TOO_SHORT = "Let me see."                   # opener but <4 words -> stay unflagged
 
+# [item 3 / 2026-06-23] cite の英語逐語引用 (markdown blockquote `> ...`) は地の文ドリフトでなく
+# cite 規範 (web-research の逐語引用必須) の正当出力。引用ブロックは言語ロックの射程外なので flag しない。
+# 修正前 (_strip_code_and_paths が blockquote を除去しない) は _EN_PROSE にマッチして RED、
+# blockquote 除去で GREEN。真ドリフトは `>` で始まらないので検出力は損なわれない。
+_CITE_BLOCKQUOTE = (
+    "確定 (cited): アプリ内ブラウザは実在します。\n"
+    "> \"Browser use lets Codex operate the in-app browser directly and verify a fix in the page.\"\n"
+    "次ターンも日本語で続けます。"
+)
+
 
 def _write_transcript(rows: list[dict]) -> str:
     fd, path = tempfile.mkstemp(suffix=".jsonl")
@@ -140,6 +150,21 @@ def main() -> int:
         if not ok:
             failures.append("all_japanese_no_warning")
 
+        # [RED→GREEN item 3] cite の英語逐語引用 (blockquote) を地の文ドリフトと誤検出しない。
+        # web-research の cite 規範は英語 verbatim を要求するので、引用ブロックは言語ロックの射程外。
+        # 修正前は blockquote が未除去で _EN_PROSE にマッチし flag (RED)、blockquote 除去で clean (GREEN)。
+        t_cite = _write_transcript([
+            _user("これどう思う?"),
+            _asst(_CITE_BLOCKQUOTE),
+            _user("ok"),
+            _asst("完了しました。"),
+        ])
+        code, err = _run(t_cite, "sid-cite", proj)
+        ok = code == 0 and "audit_english_drift" not in err
+        print(f"[{'PASS' if ok else 'FAIL'}] cite_blockquote_not_flagged: exit={code} clean={'audit_english_drift' not in err}")
+        if not ok:
+            failures.append("cite_blockquote_not_flagged")
+
         # [dedup] 同一 session で 2 回発火 → 2 回目は再警告しない (差分検出)。
         code1, err1 = _run(t1, "sid-dedup", proj)
         code2, err2 = _run(t1, "sid-dedup", proj)
@@ -148,7 +173,7 @@ def main() -> int:
         if not ok:
             failures.append("dedup_no_rewarn_same_session")
 
-    total = 6
+    total = 7
     passed = total - len(failures)
     print(f"\n{passed}/{total} passed")
     return 1 if failures else 0
