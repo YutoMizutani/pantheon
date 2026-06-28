@@ -44,6 +44,20 @@ CASES = [
     ("pycache absolute", f"rm -rf {LLM}/projects/example/__pycache__", None, True),
     ("glob inside tmp", f"rm -rf {LLM}/tmp/*", None, True),
 
+    # ---- GREEN: system /tmp scratch, strictly BELOW /tmp (2026-06-23 extension) ----
+    ("system /tmp scratch absolute", "rm -rf /tmp/open-design-eval", None, True),
+    ("system /tmp nested path", "rm -rf /tmp/open-design-eval/.git", None, True),
+    ("system /tmp glob inside a subdir", "rm -rf /tmp/open-design-eval/*", None, True),
+    ("private tmp absolute (macOS realpath of /tmp)", "rm -rf /private/tmp/scratch-x", None, True),
+
+    # ---- BAIL: system /tmp safety — never the root, never an escape, /tmp only ----
+    ("bare /tmp root never approved", "rm -rf /tmp", None, False),
+    ("glob over ALL of /tmp never approved", "rm -rf /tmp/*", None, False),
+    ("/private/tmp root never approved", "rm -rf /private/tmp", None, False),
+    ("/tmp dotdot escape bails", "rm -rf /tmp/../etc", None, False),
+    ("/var/tmp is out of scope (only /tmp)", "rm -rf /var/tmp/x", None, False),
+    ("compound /tmp rm bails (discipline)", "rm -rf /tmp/x && echo done", None, False),
+
     # ---- BAIL: discipline boundary — compound / relative are NOT auto-approved ----
     ("compound form bails (discipline)",
      f'cd {LLM}\necho "x"; rm -rf tmp/_dump_frames 2>&1 && echo "removed"', None, False),
