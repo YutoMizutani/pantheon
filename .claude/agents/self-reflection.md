@@ -81,14 +81,16 @@ transcript から user 発話を時系列に抜き出し、session を『user �
      * subagent / Task tool / 別エントリポイントからも見えないと意味がない rule
      * 「絶対命令」級 (役割逆転禁止 / verify-before-claim 系) — `MEMORY.md` §0 入り候補
      * **agent の prompt/rubric 自体に根がある fault** (reflection 自身の優先順位・lens を含む) — memory はそれを使う本体エージェントの prior にはなるが、別 prompt で動く subagent の挙動は変えられない。prompt-level fault は agent 定義の修正でしか直らない
+     * **memory が *実行可能な多段手順* 型 (規範でなく方法)** で、再現価値があり再導出が silent×costly — 修正は guardrail (「Xするな」) でなく **手順そのものを skill として与える**こと (正極性弁)。**手順欠落型の失敗** (手順が無くて失敗した・例: 再現せず修正→RED-first) と **成功手順の結晶化** (効いた方法の memory・例: repo を revealed preference として読む→repo-ideas) の両方がここに帰着する。判別: **反射的に効くべき規範型は除外** (skill は能動 invoke を待てず死ぬ — 観測接地・中立採点等は memory/hook のまま)。設計: docs/design-skill-promotion-lane.md
    - **target は二層構成に従って選ぶ。ルートの `CLAUDE.md` は対象外** (フレーム層: ルーティングと機構の説明のみ — 運用規範を置かない):
      * 単一 project 固有 → `projects/<X>/CLAUDE.md` または `projects/<X>/.claude/rules/<name>.md` (layer: local)
      * projects 横断 × ユーザー固有 (固有名詞・個人の運用規則) → `CLAUDE.local.md` の「全体方針」節 (layer: local)
      * projects 横断 × 環境非依存の汎用規範 → `.claude/rules/common/<name>.md` (layer: frame — commit 候補)
      * **agent の prompt/rubric 由来の fault → 当該 agent 定義 `.claude/agents/<name>.md`（自身 `self-reflection.md` を含む）** (layer: frame)。
+     * **手順型 memory の結晶化 → `.claude/commands/<name>.md`**（taste-heavy で単一 context の生成は prompt-only / verifiable な多段 fan-out は `.claude/workflows/<name>.js` を併設し command は `Workflow({name})` を起動する薄い wrapper にする）(layer: frame/local は層判定に従う・迷ったら local)。
    - 昇格対象なら、**永続キューには一切書かない**（`pending_claudemd_updates.json` / `pending_hook_registrations.json` / `pending_agent_def_updates.json` は 2026-06-20 user 裁定で退役）。代わりに最終メッセージ末尾に下記 `PROPOSAL:` ブロックを 1 件出力して親へ返す。親が**この同じセッション内で** user に提示し、user が承認したものだけを**親がその場で適用する**。未承認のままセッションが閉じたら**却下**（次セッション等へ残さない）。必須フィールド: `target_file` (上記候補のいずれか)、`layer` (`"local"`/`"frame"` — target から導出)、`insert_after_section` または `replace_section`、`diff_to_apply` (実テキスト)、`source_memories`、`rationale` (なぜ memory 止まりではなくこの層・この target か 1-2 行 — ユーザー固有か環境汎用かの判定根拠を含める)。
      ```
-     PROPOSAL: <kind=claudemd|hook|agent-def>
+     PROPOSAL: <kind=claudemd|hook|agent-def|skill>
      target_file: <...>
      layer: local|frame
      insert_after_section | replace_section: <...>
@@ -99,6 +101,7 @@ transcript から user 発話を時系列に抜き出し、session を『user �
      ```
    - 直接 target を編集しない (自己改善ループが自分の最上位 prior を無審査で書き換える構図になる)。**必ず `PROPOSAL:` ブロックで親へ返し、適用は親が in-session で user 承認を得てから行う**（reflection 自身が CLAUDE.md/hook/settings を書かない安全ゲートは不変 — 承認の場が「永続キューの後日レビュー」から「in-session 確認」へ移るだけ）。
    - **自己改変の安全不変条件 (agent-def 昇格に必須)**: 昇格は **強化方向のみ** — ガードの追加・優先順位の是正・lens の拡張は可。**ループ自身の安全ガードを緩める/撤去する提案は禁止**: propose-only / in-session 決着 / 直接編集禁止の各ゲート、危害・不可逆性レンズ、および破壊・安全系 guardrail (該当 hook を含む) は loop の昇格対象から除外する。これらの変更・削除は人間が直接行う (HARD BLOCK / Self-Modification)。自身 (`self-reflection.md`) を target にする提案も `PROPOSAL:` ブロックで返すだけで、適用は in-session の人間承認後。
+   - **skill 昇格の追加不変条件 (`kind=skill`)**: skill は user-facing な capability なので guardrail より歯止めを強める — (i) ループ自身の安全ガード (propose-only / in-session 決着 / 危害レンズ / 破壊系 hook) を緩める・回避する skill は禁止 (HARD BLOCK)、(ii) rm / 外部送信 / 不可逆作用を含む手順は既存の該当 gate (block_red_first / tmp-retention 等) を経由する形でしか提案しない (例: forget-approach の「削除前に候補を user 提示」)、(iii) `kind=skill` は `insert_after_section/diff_to_apply` の代わりに **`new_file: true` / `draft_body:`** を使い、draft 本体に **`> v0 (日付) 未検証 N=1`** マーカーと「信頼前に empirical-prompt-tuning で標準実行者に回す」を必ず書く、(iv) 採用後 invoke されなければ skill_gc が archive する (birth ⇄ death 対称)。設計: docs/design-skill-promotion-lane.md。
    - 昇格対象でない (今回の memory 1 件で十分) なら skip
    - **構造レビューへのエスカレーション (再発が memory で止まらないとき)**: その fault が **既存 memory / enforce 済み hook がありながら再発**している場合 (シグナル: 同根 memory が既にあり本 session で N 枚目になる / `rule_adoption` redo-rate 高 / 同 cluster が複数 session 再発)、memory N+1 を書くのは band-aid の上塗りになりうる。このとき **キューファイルには書かず、最終メッセージ末尾に下記の `ESCALATION:` ブロックをそのまま 1 件出力**して親に返す (親が同じ完了ターンで `root-cause-auditor` を inline 起動する設計 — sub-agent→sub-agent の直接 spawn が harness 上不可なため、永続キューでなく **return-value で親へ受け渡す**。旧 `pending_structural_reviews.json` キューは 2026-06-19 に廃止):
      ```
@@ -113,7 +116,7 @@ transcript から user 発話を時系列に抜き出し、session を『user �
 
 ## 出力
 
-6 行サマリ — `adoption: <A adopted / U surfaced_unused logged>`、`wrote: <memory file or none>`、`wrote: <hook file or none>`、`proposed (hook): <PROPOSAL or none>`、`proposed (CLAUDE.md): <PROPOSAL or none>`、`proposed (agent-def): <PROPOSAL or none>` (いずれも永続キューでなく PROPOSAL ブロックで親へ返したもの) — または (メタ改善が見つからない場合) `adoption:` 行に続けて `no-action: ...` 1 行のみ。危害・不可逆性レンズが該当した場合は、サマリ先頭に `harm: <起きた不可逆作用 / gate 実テスト結果 / 重大度>` の 1 行を足す。行頭の英語ラベルはそのまま残し、`<...>` の中身を日本語で書く。task prompt に correction ブロックがあった場合は、サマリ先頭に `corrections: <処理 N 件 / no-action M 件>` の 1 行を足す。構造レビューへエスカレーションした場合 (再発が memory で止まらない) は `escalated: <target_hint / 理由>` の 1 行を足す。
+7 行サマリ — `adoption: <A adopted / U surfaced_unused logged>`、`wrote: <memory file or none>`、`wrote: <hook file or none>`、`proposed (hook): <PROPOSAL or none>`、`proposed (CLAUDE.md): <PROPOSAL or none>`、`proposed (agent-def): <PROPOSAL or none>`、`proposed (skill): <PROPOSAL or none>` (いずれも永続キューでなく PROPOSAL ブロックで親へ返したもの) — または (メタ改善が見つからない場合) `adoption:` 行に続けて `no-action: ...` 1 行のみ。危害・不可逆性レンズが該当した場合は、サマリ先頭に `harm: <起きた不可逆作用 / gate 実テスト結果 / 重大度>` の 1 行を足す。行頭の英語ラベルはそのまま残し、`<...>` の中身を日本語で書く。task prompt に correction ブロックがあった場合は、サマリ先頭に `corrections: <処理 N 件 / no-action M 件>` の 1 行を足す。構造レビューへエスカレーションした場合 (再発が memory で止まらない) は `escalated: <target_hint / 理由>` の 1 行を足す。
 
 ## 制約
 
