@@ -18,9 +18,13 @@ paths:
    （memory / telemetry / runtime）は既存の [`_paths.py`](../../hooks/_paths.py) で解決する。これは
    `CLAUDE_PROJECT_DIR` 環境変数（Claude Code harness が供給）由来で env 非依存:
    ```python
-   from _paths import PROJECT_DIR, STATE_DIR, MEMORY_DIR, TELEMETRY_DIR, RUNTIME_DIR
+   from _paths import PROJECT_DIR, PANTHEON_ROOT, STATE_DIR, MEMORY_DIR, TELEMETRY_DIR, RUNTIME_DIR
    ```
-   `_paths.py` に無い派生先が要るなら、各ファイルでルートを再定義せず **`_paths.py` 側に追加**する。
+   `_paths.py` に無い派生先が要るなら、各ファイルでルートを再定義せず **`_paths.py` 側に追加**する
+   （symlink 解決済みの正準ルートは `PANTHEON_ROOT`。各 hook の `LLM_ROOT` 等の自前再宣言は廃止し import に寄せる）。
+   **例示・docstring・hook が出すメッセージも同じ規律** — 実 home でも**架空 home（`/Users/you/...`）でも**絶対 home パスを
+   書かない。例には env 由来を示す `$CLAUDE_PROJECT_DIR` か角括弧 `<リポジトリ絶対パス>` を使う（架空 home の placeholder は
+   禁止 — それ自体が直書きで、下の narrow テストを素通りする）。
 2. **理由（3層モデル）**: 絶対パス・単一運用者前提の値は「機構」でなく「校正値」
    （[docs/design-rationale.md](../../../docs/design-rationale.md) の3層分類）。機構に校正値を埋めるのは
    層の混在で、frame の可搬性主張（「どの環境でも*再生できる*機構」）を掘り崩す。
@@ -33,7 +37,12 @@ paths:
    false-positive が多い（guard-conflict — measure-first でも観測前の always-on gate は不可）。正しい境界は
    **tracked か gitignored か**で、commit される物だけがクリーンであればよい。
    [`test_no_hardcoded_home_in_tracked.py`](../../hooks/tests/test_no_hardcoded_home_in_tracked.py) が
-   `git grep`（tracked のみ走査）で実 home パスとその slug 形（`-Users-...`）を検出し 1 件でも fail する。
+   `git grep`（tracked のみ走査）で 2 段検出する: **(a)** 実 home パスとその slug 形（`-Users-...`）を repo 全体で、
+   **(b)** mechanism dir（`.claude/hooks/**`・`heaven/tools/**`）の home 形パス全般（`/Users|home/<誰でも>/` — 実 home でも
+   架空 home でも弾く。規約を説明する `_paths.py`・本テストだけ allowlist）。1 件でも fail する。
+   **(a) を通っても規約遵守ではない** — `/Users/you/...` のような架空 home は (a) を素通りするが規約違反で、mechanism dir
+   では (b) が捕まえる（2026-06-29: 架空 home placeholder を「doc 例なら OK」と誤導した結果 `/Users/you` が一度 public へ
+   出た実害を受け、テストの誤導 hint を env 由来へ直し (b) を追加した）。
    **新規に frame ファイル（とくに新規ファイル）を commit する前にこのテストを走らせる。**
    2026-06-21 promotion: c19f4dd で `cd /Users/you/Developer/llm` 形（実際は実 home）入りの新規コマンドが公開 history へ push され
    （history rewrite でしか消せない実害）、instruction-only では「新規 commit 前の走査」が抜けたのを受け、
