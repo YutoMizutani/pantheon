@@ -70,10 +70,9 @@ except Exception:  # telemetry is best-effort; never break the hook
     def record_fire(*_a, **_k):  # type: ignore
         return
 
-from _paths import PROJECT_DIR  # noqa: E402  env-derived repo root (no hardcoded user path)
+from _paths import PANTHEON_ROOT  # noqa: E402  env-derived resolved repo root (no hardcoded user path)
 
-LLM_ROOT = PROJECT_DIR.resolve()
-PROJECTS_ROOT = LLM_ROOT / "projects"
+PROJECTS_ROOT = PANTHEON_ROOT / "projects"
 ACK_MARKER = "# RM-PROJECTS-OK:"
 # Prefixes that may legitimately precede the command verb in a statement.
 _SKIP_PREFIX_VERBS = {"sudo", "time", "nice", "nohup", "command", "builtin", "exec"}
@@ -160,7 +159,7 @@ def _resolve(operand: str, cwd: Path = None) -> Path:
         base = os.path.dirname(operand) or operand
     p = Path(base)
     if not p.is_absolute():
-        p = (cwd or LLM_ROOT) / p
+        p = (cwd or PANTHEON_ROOT) / p
     try:
         return Path(os.path.normpath(str(p)))
     except Exception:
@@ -175,10 +174,10 @@ def _is_protected(operand: str, cwd: Path = None) -> bool:
     git-tracked heaven/tools/ (recoverable). ``..`` is collapsed in _resolve."""
     resolved = _resolve(operand, cwd)
     try:
-        rel = resolved.relative_to(LLM_ROOT)
+        rel = resolved.relative_to(PANTHEON_ROOT)
     except ValueError:
         # operand is the llm root itself, or outside the tree
-        return resolved == LLM_ROOT
+        return resolved == PANTHEON_ROOT
     parts = rel.parts
     if not parts:
         return True  # rm -rf <llm root>
@@ -233,9 +232,9 @@ def _git_clean_hits(args):
     for ps in pathspecs:
         resolved = _resolve(ps)
         try:
-            parts = resolved.relative_to(LLM_ROOT).parts
+            parts = resolved.relative_to(PANTHEON_ROOT).parts
         except ValueError:
-            if resolved == LLM_ROOT:
+            if resolved == PANTHEON_ROOT:
                 hits.append("git clean " + ps)
             continue
         if not parts or parts[0] == "projects":
@@ -259,7 +258,7 @@ def main() -> None:
         return
 
     hits = []
-    cwd = LLM_ROOT  # running shell cwd within this command (in-command `cd` moves it)
+    cwd = PANTHEON_ROOT  # running shell cwd within this command (in-command `cd` moves it)
     for stmt in _split_statements(cmd):
         verb, args = _verb_and_args(stmt)
         if args is None:

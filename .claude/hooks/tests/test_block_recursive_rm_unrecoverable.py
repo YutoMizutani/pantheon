@@ -94,7 +94,7 @@ CASES = [
 def run(cmd):
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}})
     # Pin the hook's repo root to LLM so cases stay deterministic regardless of the
-    # ambient CLAUDE_PROJECT_DIR / cwd (the hook derives LLM_ROOT from this env var).
+    # ambient CLAUDE_PROJECT_DIR / cwd (the hook derives PANTHEON_ROOT from this env var).
     env = {**os.environ, "CLAUDE_PROJECT_DIR": LLM}
     p = subprocess.run([sys.executable, HOOK], input=payload,
                        capture_output=True, text=True, env=env)
