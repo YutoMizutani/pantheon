@@ -43,6 +43,13 @@ Remaining guards (beyond exact match):
   - Require a prior assistant turn (something to reflect on).
   - 5 min debounce so repeated "ok" in one flow fires reflection once.
 
+When the cost gate or the debounce suppresses a MATCHED acceptance signal, the
+hook is no longer silent: it injects a ``[SELF-IMPROVE-SKIP]`` reminder (see
+``_SKIP_NOTICE``) so the agent surfaces one Japanese line explaining why the
+reflection did not start. Before this the user typed "完了"/"ok" and saw nothing,
+with no way to tell whether the reflection ran or why it didn't (user request
+2026-06-22). The skip notice deliberately does NOT carry the AUTO-LEARN-META
+spawn anchor — see the invariants on ``_SKIP_NOTICE``.
 """
 
 from __future__ import annotations
@@ -360,6 +367,56 @@ assert _REMINDER_ANCHOR in _REMINDER, (
 )
 
 
+# Notice injected when an exact acceptance signal MATCHED but a downstream gate
+# (cost gate or debounce) suppressed the reflection. Before this, those skips were
+# silent: the user typed "完了"/"ok", the reflection never started, and there was
+# no way to tell whether it ran or why it didn't (user request 2026-06-22).
+#
+# This is NOT a fire. Two invariants it must keep:
+#   - It must NOT contain _REMINDER_ANCHOR, so (a) the window-boundary detector
+#     _line_is_prior_reflection_fire never mistakes a skip notice for a prior fire
+#     and (b) the cost-gate test, which keys fire-detection on the AUTO-LEARN-META
+#     substring, still reads a gated signal as no-fire.
+#   - It must tell the agent to spawn NOTHING — only surface one line.
+_SKIP_NOTICE = """<system-reminder>
+[SELF-IMPROVE-SKIP] An acceptance signal was detected, but the background self-improvement reflection was deliberately NOT started by a downstream gate. Do NOT spawn any sub-agent and do NOT elaborate — surface exactly one Japanese line to the user so the skip is visible, then continue with the user's actual message:
+  ⏭️ 自己改善リフレクションは今回見送り: {reason}
+</system-reminder>"""
+
+# Drift guard (mirror of the _REMINDER assert): a future edit must not let the
+# skip notice carry the fire anchor, or it would be mis-read as a prior fire and
+# as a fire by the cost-gate test.
+assert _REMINDER_ANCHOR not in _SKIP_NOTICE, (
+    "_SKIP_NOTICE must NOT contain the fire anchor (see _line_is_prior_reflection_fire)."
+)
+
+
+def _skip_human_reason(decision: str, reason: str, feat: dict | None) -> str:
+    """One-line Japanese explanation of a gate skip, for the user-facing notice.
+    Phrased here (not delegated to the agent) so the surfaced text is deterministic
+    and does not depend on the agent re-deriving internal reason codes."""
+    tu = (feat or {}).get("tool_use")
+    if decision == "debounce":
+        return (
+            "直近5分以内に既にリフレクションが起動済みのためクールダウン中"
+            "（重複起動の抑止であり、振り返り自体は動いています）"
+        )
+    if reason.startswith("low-activity"):
+        return (
+            f"今回の作業量が少なく（tool 実行 {tu} 回 < 閾値 {_MIN_TOOLUSE_TO_REFLECT}）、"
+            "振り返れる素材が乏しいため"
+        )
+    if reason.startswith("cron-only"):
+        return f"人手のタスクが無い自動 wake のみの窓（tool 実行 {tu} 回）だったため"
+    return f"ゲート判定により見送り（{reason}）"
+
+
+def _emit_skip_notice(decision: str, reason: str, feat: dict | None) -> None:
+    """Inject the skip notice so a gated acceptance signal is not silent."""
+    sys.stdout.write(_SKIP_NOTICE.format(reason=_skip_human_reason(decision, reason, feat)))
+    sys.stdout.write("\n")
+
+
 def _read_payload() -> dict:
     raw = sys.stdin.read().strip()
     if not raw:
@@ -499,12 +556,14 @@ def main() -> int:
         should_fire, reason = _gate_decision(feat)
         if not should_fire:
             _log_gate(sid, "skip", reason, feat)
+            _emit_skip_notice("skip", reason, feat)
             return 0
     else:
         reason = "fire-failopen-no-features"
 
     if not _check_and_set_debounce(sid):
         _log_gate(sid, "debounce", reason, feat)
+        _emit_skip_notice("debounce", reason, feat)
         return 0
 
     _log_gate(sid, "fire", reason, feat)
