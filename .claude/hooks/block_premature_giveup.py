@@ -1,6 +1,21 @@
 #!/usr/bin/env python3
 """block_premature_giveup — self-contained gate against premature give-ups.
 
+STATUS: DORMANT / instruction-only (NOT wired into settings.*.json — verified
+2026-06-22). Kept in-repo with its test suite, but enforce currently lives in the
+instruction layer (memory feedback_attempt_before_declaring_impossible), not as a
+live Stop hook. Why it stays unwired: a measure-first pass ran the real transcript
+corpus (564 sessions) through this gate — the self-authored test is 15/15 green,
+but on real input block-precision was ~50% (false positives: bare 「無理」 misfiring
+on 「無理に〜ず」 = the opposite of giving up, and blocking a turn that answered the
+user's own question) AND it missed the worst real case (a vocabulary-free soft
+give-up: 「別の人/方法に切り替える判断でも構いません」). Wiring as-is is net-negative. The
+real recurring pain (menu-handback) is already covered by the wired self-pick guards
+(block_askuser_after_self_pick / audit_user_pick_from_self_options). Before wiring,
+fix the 「無理に〜ず」 false positive and re-run the real-corpus precision measurement;
+do not trust the self-authored test alone
+(feedback_self_authored_artifact_not_authoritative_spec).
+
 Failure it prevents
 -------------------
 Declaring a task 無理 / 限界 / 不可能 / 原理的限界 / "ここで止めます" and handing the
@@ -51,7 +66,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _paths import PROJECT_DIR  # noqa: E402  env-derived repo root (no hardcoded user path)
+from _paths import RUNTIME_DIR  # noqa: E402  env-derived runtime dir (no hardcoded user path)
 try:
     from _fire_counter import record_fire  # noqa: E402
 except Exception:  # pragma: no cover - telemetry best-effort
@@ -140,10 +155,7 @@ _USER_ANGER = re.compile(
     r"|クソ|くそ|ボケ|ぼけ|何(?:やって|して)(?:ん|る)"
 )
 
-_AUDIT_LOG = (
-    PROJECT_DIR
-    / "projects/discord/apps/session-bridge/runtime/block_premature_giveup_audit.log"
-)
+_AUDIT_LOG = RUNTIME_DIR / "block_premature_giveup_audit.log"
 _MEMORY_SLUG = "feedback_attempt_before_declaring_impossible"
 _CATEGORY = "premature_giveup"
 
