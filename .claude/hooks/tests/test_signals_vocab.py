@@ -13,6 +13,7 @@ Contract (frame/local split of the self-improvement signal hooks):
   - The tracked signals.json.example (origin-environment JA pack) stays valid.
 """
 from __future__ import annotations
+import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, not the real log
 
 import json
 import os

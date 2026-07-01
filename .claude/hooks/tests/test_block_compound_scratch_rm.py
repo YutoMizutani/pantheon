@@ -12,6 +12,7 @@ Includes the guard-conflict check: a command echoing a top-level safety guard's
 legitimate stop-output must NOT fire (verb-based; the hook only reads Bash commands).
 Run: python3 .claude/hooks/tests/test_block_compound_scratch_rm.py
 """
+import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, not the real log
 import json
 import subprocess
 import sys

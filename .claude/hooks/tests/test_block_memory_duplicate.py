@@ -8,6 +8,7 @@ instead of creating a parallel one. Novel descriptions, MEMORY.md, overwrites of
 existing files, and Edit calls all PASS.
 """
 from __future__ import annotations
+import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, not the real log
 
 import glob
 import json

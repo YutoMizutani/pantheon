@@ -20,6 +20,7 @@ gated signal as no-fire. We assert fire/skip by stdout presence and, separately,
 that the skip notice + a human reason are surfaced on the gated paths.
 """
 from __future__ import annotations
+import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, not the real log
 
 import json
 import os

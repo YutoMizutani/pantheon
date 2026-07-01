@@ -7,6 +7,7 @@ bloated index line. Shortening an existing over-long line, adding a short line,
 or any edit to a non-MEMORY.md file must PASS.
 """
 from __future__ import annotations
+import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, not the real log
 
 import json
 import subprocess
