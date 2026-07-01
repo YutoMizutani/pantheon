@@ -5,6 +5,7 @@ Exit code: 2 = block (forced redo), 0 = pass/audit. Run:
     python3 .claude/hooks/tests/test_block_premature_giveup.py
 """
 from __future__ import annotations
+import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, not the real log
 
 import json
 import subprocess

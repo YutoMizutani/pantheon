@@ -9,6 +9,7 @@ compound-aware parser was prototyped and reverted for added attack surface (see
 feedback_tmp_cleanup_single_absolute_rm.md). Run:
   python3 .claude/hooks/tests/test_allow_tmp_rm.py
 """
+import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, not the real log
 import json
 import subprocess
 import sys

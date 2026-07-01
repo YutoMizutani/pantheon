@@ -5,6 +5,7 @@ Run: python3 .claude/hooks/tests/test_block_recursive_rm_unrecoverable.py
 The dangerous command strings live here as data (not on a shell command line),
 so running this file does not trip the harness destructive-rm permission gate.
 """
+import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, not the real log
 import json
 import os
 import subprocess

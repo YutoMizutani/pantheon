@@ -9,6 +9,7 @@ turn だけを走査し、会話中盤 (連続技術作業の没入区間) で�
 検証するので内部関数名のリネームに頑健。
 """
 from __future__ import annotations
+import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, not the real log
 
 import json
 import os

@@ -8,6 +8,7 @@ system prompts do not; (e) the hook produces NO durable side effect (never
 recreates the retired correction queue). Run:
   python3 .claude/hooks/tests/test_correction_nudge.py
 """
+import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, not the real log
 import json
 import os
 import subprocess

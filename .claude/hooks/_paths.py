@@ -23,7 +23,17 @@ def _slug(p) -> str:
 
 STATE_DIR = Path.home() / ".claude" / "projects" / _slug(PROJECT_DIR)
 MEMORY_DIR = STATE_DIR / "memory"
-TELEMETRY_DIR = STATE_DIR / "telemetry"
+# Telemetry root. ``FRAME_TELEMETRY_DIR`` is a hermetic-test seam (同 FRAME_SIGNALS_FILE):
+# when set, ALL frame-hook telemetry writes (reflection_gate / hook_fires / ...) go there
+# instead of the operator's real ``~/.claude/projects/<slug>/telemetry/``. Root cause of the
+# 2026-06 pollution was that this path derived only from CLAUDE_PROJECT_DIR (= cwd when unset),
+# so a manual test run wrote test-gate-*/sigv-* records into the production logs that
+# review:pantheon / rule-auditor then read as real activity. Tests redirect via tests/_hermetic.py.
+TELEMETRY_DIR = (
+    Path(os.environ["FRAME_TELEMETRY_DIR"]).expanduser()
+    if os.environ.get("FRAME_TELEMETRY_DIR")
+    else STATE_DIR / "telemetry"
+)
 RUNTIME_DIR = PROJECT_DIR / ".claude" / "runtime"
 
 # 生のホームパス (例: /Users/you) が user-facing テキストに漏れたことを検出する正規表現
