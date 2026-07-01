@@ -13,7 +13,8 @@ model: sonnet
 2. **memory staleness**: `~/.claude/projects/<project-slug>/memory/*.md` を ls -lt。`feedback_*.md` のうち、対応する hook が COLD (0 発火) または存在しないものを突き合わせる。`telemetry/memory_touches.jsonl` があれば touch 履歴も見る。
 3. **skill bloat**: `python3 heaven/tools/skill_gc.py` の先頭サマリ (total / unique / dup) を読み、突出した project を 1-2 個挙げる。
 4. **empirical ledger / regression**: (任意) empirical-prompt-tuning 系の regression 監査ツールを導入している環境ではここで実行する。`regressed` verdict (rate-based: post-tune レートが pre-tune baseline×1.5 超 かつ post 発火≥3) の行を **revert 候補**として下記 "regressed tune" に挙げる。`provisional` 放置 / 空テーブルも指摘。
-5. **promotion queue staleness — 退役 (2026-06-20 user 裁定)**: 自己改善の永続承認キュー (`pending_hook_registrations` / `pending_claudemd_updates` / `pending_agent_def_updates`) は**全廃**された。自己改善エージェント由来の提案は in-session で決着し永続キューに残らないため、**滞留監査の対象は無い** — `pending_queue_report.py` の起動も queue の Read も不要。残存ファイルがあれば空のはず（空でなければ旧 stale 物として user に 1 行報告するだけ）。
+5. **昇格層 GC (常時原則の birth⇄death 対称化)**: `python3 heaven/tools/promotion_layer_report.py --days 30` を実行。`CLAUDE.local.md` の常時原則各節と参照 source memory の adoption/touch/fire を集計し、**直近に独立した効きの証拠が無い (zero-signal) 節**を降格候補として下記 "昇格層 降格候補" に挙げる。**proxy 注意を必ず添える**: 常時原則は always-loaded ゆえ surfaced イベントが無く、昇格後は on-demand 側 source memory が読まれず adoption が 0 に落ちうる (偽陰性)。よって zero-signal は「無効の証明」でなく「その always-loaded コストに見合うか user に問う候補」。降格 (on-demand へ戻す) は user 判断で、memory 層の cold 判定 (step 2) と同じく単一シグナルで断定しない。背景: memory 層には GC があるのに昇格層 (毎ターン全文ロードの最高コスト層) には死滅機構が無く単調増加していた欠陥への手当て。
+6. **promotion queue staleness — 退役 (2026-06-20 user 裁定)**: 自己改善の永続承認キュー (`pending_hook_registrations` / `pending_claudemd_updates` / `pending_agent_def_updates`) は**全廃**された。自己改善エージェント由来の提案は in-session で決着し永続キューに残らないため、**滞留監査の対象は無い** — `pending_queue_report.py` の起動も queue の Read も不要。残存ファイルがあれば空のはず（空でなければ旧 stale 物として user に 1 行報告するだけ）。
 
 ## 出力契約 (構造化レポート)
 
@@ -25,6 +26,8 @@ model: sonnet
 - <hook> : record_fire 未呼出。計装すれば cold/hot 判定可能に
 ### skill bloat
 - <project> : N skills (dup M)。skill_gc --archive 候補
+### 昇格層 降格候補 (常時原則 GC・N)
+- <常時原則の見出し> : 直近 30d zero-signal (adopted/touch/fire=0)。source=[<slugs>]。判断: on-demand へ降格提案 / 様子見 (proxy 偽陰性の可能性 — always-loaded は surfaced イベント無し)
 ### ledger 停滞
 - <指摘>
 ### regressed tune (N) — revert 候補
