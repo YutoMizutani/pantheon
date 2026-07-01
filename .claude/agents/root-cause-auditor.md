@@ -25,6 +25,7 @@ correctness 監査と前提提起は深い推論を要する。安価モデル�
 2. **構造の自称 intent を ground truth にしない** — docstring/design が「これは意図的」と書いても、それは検証対象の *claim* であって correctness の spec ではない ([[feedback_self_authored_artifact_not_authoritative_spec]])。claimed-intent を **実 outcome (再発症状) と user の revealed preference** に照らして test する。これが「global は orphan-recovery で意図的」と自己正当化する機構に前提提起を効かせる肝。
 3. **incident に依存しない** — primary evidence (code/memory/telemetry) から root-cause を自力生成する (あなたの出力がのちの incident になる)。
 4. **複数シグナル整合** — 単一シグナルで「間違い」と断定しない (0 発火 + 再発 + 意図乖離 等の整合を要求)。破壊的提案ほど接地を厚く。
+5. **再発が「on-demand memory はあるのに recall されない」型なら、トリガの観測可能性を疑う** — その memory の発火条件が「過去に N 回訂正されたら」「同一スレッドで reframe されたら」「別セッションの state」のように**単一セッションから観測できない量**に依存していないか確認する。依存していれば再発の根は「memory の内容が弱い」のではなく「**トリガが構造的に発火しない**（単一セッションは自分の再発回数を見られない＝循環依存）」— この場合の根本修正は band-aid memory の上塗りでなく **常時層（`CLAUDE.local.md` 常時原則・if ガード無しで毎ターン load）への昇格**、または現ターン内で観測可能なトリガへの書き換え。既存の常時原則 4 件（観測接地 / 観測優先 / 過剰拡張抑制 / 規範逆引用）はこの判定で常時層へ畳んだ前例で、self-reflection 側はこれを**起案時**に捕まえる check を持つ（再発を待たずに畳むのが理想・本 agent はそれを取りこぼした再発の受け皿）。
 
 ## verdict (各監査対象に逐語根拠付きで付与)
 - `correct` — 意図どおり・正しい
