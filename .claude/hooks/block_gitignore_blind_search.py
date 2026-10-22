@@ -99,7 +99,9 @@ _MSG = {
         "(projects/, *.local.*, heaven/memory/ entities, settings.local.json) is "
         "gitignored, so this returns 0 for the bulk of the repo and looks 'clean' "
         "(false-negative). For repo-wide search use `rg --no-ignore-vcs <pat>`; run a "
-        "positive control before trusting a 0. "
+        "positive control before trusting a 0. Note the root .ignore still hides "
+        "build/, logs/, tmp/, dist/ from rg; when those hold real content use `rg -u <pat>` "
+        "or pass the folder path directly. "
         "See feedback_grep_residual_refs_blind_to_gitignored_config.md."
     ),
 }
@@ -120,12 +122,22 @@ def main() -> None:
         return
     # broken flag fails outright -> prioritise that message over recursive
     kind = "broken" if any(k == "broken" for _, k in hits) else "recursive"
+    # Instrument only -- the warning text is NOT emitted here any more.
+    # Why (2026-10-12, user-approved): this hook wrote _MSG to stderr and exited 0,
+    # and an exit-0 hook's stdout/stderr never reaches the model in this harness
+    # (measured: all 615 `[grep-blind]` attachments carry `"content": ""`). So the
+    # 1656 "warn" fires changed nothing -- they were never delivered. Rather than
+    # re-route the same text to the delivered path (stdout additionalContext), the
+    # warning moved to `flag_empty_blind_search_result.py` (PostToolUse): of 1674
+    # flagged greps only 47 (2.8%) returned nothing, and the harm lives in those 47.
+    # Warning on all 1674 would buy ~11 injections/day and desensitisation; warning
+    # at the moment a 0 is about to be believed is ~35x more precise.
+    # `record_fire` stays so the telemetry series is unbroken and comparable.
     record_fire(
         "feedback_grep_residual_refs_blind_to_gitignored_config",
-        "warn",
+        "observe",
         context=f"{kind}:{hits[0][0]}",
     )
-    sys.stderr.write(_MSG[kind] + "\n")
     sys.exit(0)
 
 

@@ -44,6 +44,10 @@ CASES = [
     ("app-level tmp", f"rm -rf {LLM}/projects/example/apps/sample-app/tmp/y", None, True),
     ("pycache absolute", f"rm -rf {LLM}/projects/example/__pycache__", None, True),
     ("glob inside tmp", f"rm -rf {LLM}/tmp/*", None, True),
+    # block_tmp_rm_with_live_references.py が求める注記を付けても自動許可が外れない（2026-10-19。以前は注記の語を対象に数えて外れていた）
+    ("TMP-REFS-OK marker comment", f"rm -rf {LLM}/projects/example/tmp/x # TMP-REFS-OK: 参照は既定値だけ", None, True),
+    ("comment cannot hide a non-tmp operand", f"rm -rf {LLM}/projects/example/src # TMP-REFS-OK: x", None, False),
+    ("non-tmp operand before a comment still bails", f"rm -rf {LLM}/tmp/a {LLM}/projects # tmp", None, False),
 
     # ---- GREEN: system /tmp scratch, strictly BELOW /tmp (2026-06-23 extension) ----
     ("system /tmp scratch absolute", "rm -rf /tmp/open-design-eval", None, True),
