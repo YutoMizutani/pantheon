@@ -30,6 +30,7 @@ import base64
 import hashlib
 import json
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -41,6 +42,7 @@ except Exception:  # pragma: no cover
 
 TAIL_LINES = 400
 MAX_REBLOCK = 2
+FLUSH_WAIT_S = 2.0  # 記録の書き出しの遅れを待つ上限（秒）
 
 
 def _is_visible(c) -> bool:
@@ -141,6 +143,13 @@ def main() -> int:
         return 0
     event = payload.get("hook_event_name") or "PreToolUse"
     pending = unanswered_queued(Path(tp))
+    # 同じ応答の中でツールの前に書いた文は、hook が記録を読む時点でまだ書き出されていないことがある
+    # （2026-10-23: 答えを書いたのに「答えていない」と止めた。最初のツール呼び出しでだけ起き、次の応答では通った）。
+    # 止める前に少し待って読み直す。本当に答えていなければ、待ったあと今までどおり止める。
+    deadline = time.monotonic() + FLUSH_WAIT_S
+    while pending and time.monotonic() < deadline:
+        time.sleep(0.2)
+        pending = unanswered_queued(Path(tp))
     sp = _state_path(payload.get("session_id", "x"))
 
     if event == "Stop":
