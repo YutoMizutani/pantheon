@@ -40,7 +40,7 @@ memory / incident に明示接地している（git frontmatter で確認済・2
 - `repo-ideas` — 「このセッションで効いた手順の忠実な写し」/ SSoT = memory
   `feedback_value_discovery_read_repo_as_revealed_preference`
 - `reference-ideas` — 同上「効いた手順の写し」
-- `forget-approach` — 「設計は本環境の example-api.io 削除トレースに接地」/ incident doc 紐付け
+- `forget-approach` — 「設計は、却下した外部 API の参照を消した実際の作業の記録に接地」/ incident doc 紐付け
 - `bug-fix`（RED-first）/ `web-research`（一次ソース先行）— いずれも失敗 memory が含意した
   *手順* を手で skill+workflow に引き上げたもの
 
