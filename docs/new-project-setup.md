@@ -107,9 +107,10 @@ The guidance that applies except when the predicate holds.
 
 最小知識:
 
-- `settings.json` の `hooks` に登録する。イベントは主に `PreToolUse`（実行前 — block 可能）/ `PostToolUse`（実行後 — 観測のみ）/ `UserPromptSubmit` / `Stop`。
+- `settings.json` の `hooks` に登録する。イベントは主に `PreToolUse`（実行前 — block 可能）/ `PostToolUse`（実行後 — block はできないが `additionalContext` でモデルに注入可・`updatedToolOutput` で出力差し替えも可。「観測のみ」ではない）/ `UserPromptSubmit` / `Stop`。
 - スクリプトは stdin で JSON（`tool_name`, `tool_input`, PostToolUse なら `tool_response`）を受け取る。
 - exit code: `0` = 通過、`2` = block（stderr が Claude へのフィードバックになる）。
+- **exit 0 のときの stdout/stderr はモデルに届かない**（記録には残るが文脈に入らない）。block せずに注意だけ伝えたいときは stdout に `{"hookSpecificOutput": {"hookEventName": "<event>", "additionalContext": "<本文>"}}` を出す。stderr + exit 0 で書いた注意文は**無配送**になる（2026-10-12 実測: 該当添付 615 件すべて `content` 空）。
 - パスは `$CLAUDE_PROJECT_DIR`（harness が供給）から導出し、ハードコードしない。
 - **どの settings.json に登録するか**: harness が hook を読むのは**セッションを開いたディレクトリ**の `.claude/settings.json`（+ user settings）だけ。フレームルートで運用する通常モードでは、**ルートの** `.claude/settings.json` へ `projects/<name>/...` のフルパスで登録する。プロジェクト配下の `settings.json` が効くのは、そのプロジェクトを単独のセッションルートとして開いたときのみ。
 
