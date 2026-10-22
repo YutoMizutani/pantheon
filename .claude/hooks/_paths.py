@@ -16,6 +16,12 @@ PROJECT_DIR = Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()))
 # する (no-hardcoded-repo-path 規約: ルートを各ファイルで再定義しない)。
 PANTHEON_ROOT = PROJECT_DIR.resolve()
 
+# この repo（hook ファイルが置かれた Pantheon）のルート。起動フォルダに依らない。PROJECT_DIR /
+# PANTHEON_ROOT は起動フォルダなので、`cd projects/<name> && claude` で起動したセッションでは
+# projects/<name> になる。「repo のルート直下」「repo 全体が対象」を判定する hook はこちらを使う
+# （2026-10-23: PROJECT_DIR で判定した hook が projects/<name>/TODO.md を「ルート直下」と誤って止めた）。
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _slug(p) -> str:
     return re.sub(r"[^A-Za-z0-9]", "-", str(p))

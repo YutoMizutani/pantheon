@@ -72,8 +72,8 @@ except Exception:  # telemetry is best-effort; never break the hook
     def record_fire(*_a, **_k):  # type: ignore
         return
 
-from _paths import PROJECT_DIR  # noqa: E402
-_CANONICAL = str(PROJECT_DIR / "tmp" / "playwright-mcp") + "/"
+from _paths import REPO_ROOT  # noqa: E402
+_CANONICAL = str(REPO_ROOT / "tmp" / "playwright-mcp") + "/"  # この repo のルートの tmp
 # Any playwright MCP server variant (playwright, playwright-login, ...).
 _SCREENSHOT_RE = re.compile(r"^mcp__playwright[\w-]*__browser_take_screenshot$")
 _RUN_CODE_RE = re.compile(r"^mcp__playwright[\w-]*__browser_run_code_unsafe$")

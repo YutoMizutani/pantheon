@@ -20,6 +20,10 @@ paths:
    ```python
    from _paths import PROJECT_DIR, PANTHEON_ROOT, STATE_DIR, MEMORY_DIR, TELEMETRY_DIR, RUNTIME_DIR
    ```
+   **`PROJECT_DIR` / `PANTHEON_ROOT` は起動フォルダ**で、`projects/<name>` で起動したセッション（無人の runner 等）では
+   そのフォルダになる。「この repo のルート直下か」「repo 全体が対象か」を判定するなら **`REPO_ROOT`**（hook ファイルの
+   置き場から求める）を使う。直書きの値を `_paths` の値へ置き換えたら、起動フォルダが repo ルートの場合と
+   `projects/<name>` の場合の 2 通りで、置き換え前と同じ判定になることを確かめる。
    `_paths.py` に無い派生先が要るなら、各ファイルでルートを再定義せず **`_paths.py` 側に追加**する
    （symlink 解決済みの正準ルートは `PANTHEON_ROOT`。各 hook の `LLM_ROOT` 等の自前再宣言は廃止し import に寄せる）。
    **例示・docstring・hook が出すメッセージも同じ規律** — 実 home でも**架空 home（`/Users/you/...`）でも**絶対 home パスを

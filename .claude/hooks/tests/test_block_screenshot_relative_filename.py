@@ -25,6 +25,7 @@ import _hermetic  # noqa: F401 — hermetic telemetry: writes go to a tmp dir, n
 import json
 import os
 import subprocess
+from pathlib import Path
 import sys
 
 HOOK = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -50,7 +51,7 @@ def _runcode(code: str, server: str = "playwright"):
                  "tool_input": {"code": code}})
 
 
-CANON = os.path.join(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd(), "tmp", "playwright-mcp") + "/"
+CANON = str(Path(__file__).resolve().parents[3] / "tmp" / "playwright-mcp") + "/"  # hook と同じく repo のルート（起動フォルダに依らない）
 
 # (label, (stderr, returncode), want_fire, want_exit)
 CASES = [

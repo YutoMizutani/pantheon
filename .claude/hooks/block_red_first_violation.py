@@ -23,8 +23,8 @@ _CODE_EXTS: frozenset[str] = frozenset({
 })
 
 __import__("sys").path.insert(0, __import__("os").path.dirname(__import__("os").path.abspath(__file__)))
-from _paths import PROJECT_DIR, RUNTIME_DIR  # noqa: E402
-_LLM_ROOT = str(PROJECT_DIR).rstrip("/") + "/"
+from _paths import REPO_ROOT, RUNTIME_DIR  # noqa: E402
+_LLM_ROOT = str(REPO_ROOT) + "/"  # 起動フォルダでなく、この repo のルート
 
 _MARKER_TYPO_RE = re.compile(r"#\s*TDD-RED-OK:\s*(\S[^\n]*)")
 _MARKER_USER_OK_RE = re.compile(r"#\s*RED-UNREPRODUCIBLE-USER-OK:\s*(\S[^\n]*)")

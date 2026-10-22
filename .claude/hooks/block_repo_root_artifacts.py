@@ -33,8 +33,10 @@ except Exception:  # never let telemetry import break a hook
     def record_fire(*_a, **_k) -> None:  # type: ignore
         return None
 
-from _paths import PROJECT_DIR  # noqa: E402
-REPO_ROOT = str(PROJECT_DIR).rstrip("/")
+# ルートは hook ファイルの置き場（.claude/hooks の 2 つ上）で決める。起動フォルダ（CLAUDE_PROJECT_DIR）は
+# projects/<name> で起動した無人実行ではそのフォルダになり、そこの状態ファイルを誤って止める（2026-10-23）
+from _paths import REPO_ROOT as _REPO_ROOT  # noqa: E402
+REPO_ROOT = str(_REPO_ROOT)
 
 # Files that legitimately live at the repo root. Anything else is rejected.
 ALLOWLIST: frozenset[str] = frozenset(
