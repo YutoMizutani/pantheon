@@ -19,8 +19,14 @@ hook 本体だけでなく**語彙設定**もここに置く: `signals.json`（a
 実装ノート:
 
 - 共有 helper（`_paths` / `_fire_counter` 等）は親 dir にあるので、import 前に
-  `sys.path.insert(0, str(Path(__file__).parent.parent))` を入れる。
+  `sys.path.insert(0, str(Path(__file__).parent.parent))` を入れる。この形は置き場所に依存するので、
+  hook を別の場所（`projects/<name>/.claude/hooks/` の plugin 等）へ移すときは、リポジトリのルートから
+  `.claude/hooks` を指す形に直す（直さないと import が失敗し、例外を握る hook は黙って何もしなくなる）。
 - telemetry は frame hook と同じ扱い — `record_fire()` を呼べば
   `heaven/tools/telemetry_report.py` の棚卸し（cold-hook 監査）に含まれる。
-- settings からの起動はフルパス指定なので配置だけで動く:
-  `python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/local/<name>.py"`
+- settings の行は「ファイルが無ければ何もせず通す」形で書く（`python3 <path>` のままだと、ファイルを
+  移した瞬間に exit 2 ＝ツールを止める、になり全セッションが止まる）:
+  `f="$CLAUDE_PROJECT_DIR/.claude/hooks/local/<name>.py"; [ -f "$f" ] || exit 0; python3 "$f"`
+  手で書かずに `python3 heaven/tools/hook_guard.py` で一括変換してよい（`--check` で検査）。
+- hook を移す・消すときは、先に settings の行を外す（または移し先で登録して動くのを確かめてから外す）→
+  ファイルを移す、の順。

@@ -5,11 +5,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/detect_acceptance_signal.py\""
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/detect_acceptance_signal.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\""
           },
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/inject_correction_nudge.py\""
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/inject_correction_nudge.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\""
           }
         ]
       }
@@ -20,11 +20,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block_memory_index_bloat.py\""
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/block_memory_index_bloat.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\""
           },
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block_memory_duplicate.py\""
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/block_memory_duplicate.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\""
           }
         ]
       },
@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/touch_memory_on_read.py\""
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/touch_memory_on_read.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\""
           }
         ]
       }
