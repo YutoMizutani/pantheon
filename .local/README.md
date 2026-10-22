@@ -13,6 +13,9 @@
 | `.local/settings.local.json` | `/.claude/settings.local.json` | harness 設定の上書き |
 | `.local/hooks/` | `/.claude/hooks/local/` | ユーザー固有語彙を encode した local hook |
 | `.local/memory/` | `~/.claude/projects/<slug>/memory` + `/heaven/memory` | memory 実体 |
+| `.local/skill-addons/<スキル名>.md` | （symlink なし。hook `inject_skill_addons.py` が読む） | どの skill にも足せる、この環境だけの追加手順（skill addon）。skill が呼ばれた直後に差し込まれる。プロジェクト階層ごとの分は `projects/<…>/.claude/skill-addons/` に置く（仕組みは `docs/skill-addons.md`） |
+| `.local/decision-catalog.md` | （symlink なし。ルール `decision-tool-selection` が読む） | 道具選択の一覧。あるときだけそのルールが効く（opt-in） |
+| `.local/rule-packs/` | 各 `projects/<name>/.claude/rules/<パック名>/`（相対 symlink。relink 不要） | 複数プロジェクトで共有するルールの実体（パックごとに 1 フォルダ。仕組みは `docs/new-project-setup.md`「共通ルールパック」） |
 
 **入れないもの**: `projects/*/.local/` の実行時データ（sqlite・thumbs・pid 等）。
 これらは env 固有で移植しない。`.local/` ＝「この階層の gitignored ローカル層」という

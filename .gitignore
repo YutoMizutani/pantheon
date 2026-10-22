@@ -26,6 +26,9 @@
 !/docs/
 !/heaven/
 !/projects/
+# プラグインのマーケットプレイス（opt-in で配る機能。`claude plugin marketplace add <repo>` で入れる）
+!/.claude-plugin/
+!/plugins/
 
 # --- .local/: ローカル層をこの 1 フォルダに集約 (移植の 1 単位)。README anchor だけ frame ---
 #     gitignored だと新規 clone で存在に気づけないので、README.md だけ track して
@@ -46,11 +49,11 @@
 # シグナル語彙のサンプル (原環境較正済みパック) はフレーム層として配布する。
 # 実体 signals.json はユーザー較正値なのでローカル層のまま。
 !/.claude/hooks/local/signals.json.example
+# ローカル層 rule (実体は .local/rules。relink-local.sh が symlink を張る)
+/.claude/rules/local/
 
 # --- heaven/: エージェントの自由領域はローカルが既定。出荷する計器だけ frame ---
 /heaven/*
-# ローカル層 rule (実体は .local/rules。relink-local.sh が symlink を張る)
-/.claude/rules/local/
 !/heaven/README.md
 !/heaven/tools/
 !/heaven/memory/

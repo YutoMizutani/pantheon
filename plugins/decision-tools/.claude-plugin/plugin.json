@@ -1,0 +1,7 @@
+{
+  "name": "decision-tools",
+  "version": "0.1.0",
+  "description": "判断・計算の道具を作る前に、問題の形から手法を選び、近似の差・物差し・記録を 1 行で残させる skill と、道具選択の一覧の雛形",
+  "author": { "name": "Pantheon" },
+  "keywords": ["decision", "optimization", "probability", "catalog"]
+}

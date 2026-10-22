@@ -31,3 +31,7 @@
 | hedge 監査 | 「念のため」「影響不明」で根拠の無い懸念を量産する | `hooks/block_hedged_concerns.py`（reflection が新 hook を起案する際の雛形でもある） |
 | home パス / 個人名マスク | 出力を外部へ中継する環境で生パス・個人名が漏れる | `hooks/mask_home_in_text.py` + `hooks/strip_user_names.py`（中継 transport を持つ環境のみ価値あり） |
 | tmp retention | tmp/ の heavy 中間物が削除主体不在のまま蓄積する | `rules/tmp-retention.md` + `tools/tmp_bloat_report.py` |
+| 道具選択の一覧 | 同じ形の判断問題（予算内の選択・強化の止めどき等）を道具ごとに別々の近似で書き、答えの正しさを測る物差しも無い | プラグイン `decision-tools@pantheon`（`/plugins/`。入れ方は `plugins/decision-tools/skills/decision-tool-selection/catalog-template.md`）。clone 内なら配線済みの `.claude/rules/common/decision-tool-selection.md` が `.local/decision-catalog.md` を置くだけで効く |
+
+opt-in のプラグインは repo root の `.claude-plugin/marketplace.json`（マーケットプレイス名 `pantheon`）に並ぶ。
+`claude plugin marketplace add <この repo のパスか owner/repo>` → `claude plugin install <名前>@pantheon` で入れる。

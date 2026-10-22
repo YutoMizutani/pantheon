@@ -37,6 +37,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/inject_skill_addons.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\""
+          }
+        ]
+      }
     ]
   }
 }

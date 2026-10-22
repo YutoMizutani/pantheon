@@ -1,0 +1,17 @@
+{
+  "name": "pantheon",
+  "description": "Pantheon の opt-in 機能。入れた機能だけが効く",
+  "owner": { "name": "Pantheon" },
+  "plugins": [
+    {
+      "name": "decision-tools",
+      "source": "./plugins/decision-tools",
+      "description": "判断・計算の道具を作る前に問題の形から手法を選ばせる（同じ形の問題を道具ごとに別々の近似で書き、正しさを測れないときに）"
+    },
+    {
+      "name": "lens-next",
+      "source": "./plugins/lens-next",
+      "description": "観点を軸にプロジェクトを見回し、次の一手を優先度順に出して TODO に積む"
+    }
+  ]
+}

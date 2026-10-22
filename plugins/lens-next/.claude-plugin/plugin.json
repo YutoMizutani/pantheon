@@ -1,0 +1,7 @@
+{
+  "name": "lens-next",
+  "version": "0.1.0",
+  "description": "指定した観点（記事・URL・ファイル・文）を軸にプロジェクトを実測で見回し、次にやるべきことを優先度順に N 件出す。TODO に 1 SP ずつ分解して積む",
+  "author": { "name": "Pantheon" },
+  "keywords": ["planning", "todo", "review"]
+}
