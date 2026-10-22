@@ -66,7 +66,7 @@ reflection は step 4 で memory を書く / touch する。そのとき **そ�
 2. **generalize-on-recurrence**: その手順が複数 session で再導出された／再現価値がある。
    単発 success は memory 止まり（churn 防止）。
 3. **measure-first の手順版**: 再導出が *silent かつ高コスト*。loud で安い再導出は prose memory で十分。
-4. **既存 skill と重複しない**（`.claude/commands/` を grep）— あるなら新設でなく既存の拡張。
+4. **既存 skill と重複しない**（`.claude/skills/`・`.claude/commands/`・`projects/*/.claude/skills/`・`projects/*/.claude/commands/` を grep）— あるなら新設でなく `kind=skill-edit` で既存を直す（手段の選び方は `.claude/rules/common/skill-revision.md`）。
 
 ## 5. 産物と PROPOSAL 形式
 

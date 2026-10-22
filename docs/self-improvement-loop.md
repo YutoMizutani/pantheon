@@ -12,8 +12,9 @@
   └─ acceptance「完了/ok」→ detect_acceptance_signal.py
         └─ 親が background reflection subagent を spawn ＝唯一の memory 書き込みゲート
               transcript を読み、失敗を分類 (saying-fault / judgement-fault / hybrid)
-              → memory ファイルを書く (+ saying-fault なら hook を起案)
+              → 誤りを生んだ規則・道具・手順を書き換える (書き換える先が無いときだけ memory / hook を足す)
               → memory が *手順* 型なら skill (.claude/commands) を起案 (正極性弁・PROPOSAL)
+              → 既存 Skill を使った作業の fault は、その Skill の本文・道具・検査・係の定義を直す (skill-edit・PROPOSAL)
               → hook 登録・上位層昇格・skill は直接編集せず PROPOSAL ブロックで親へ返す (in-session で user 承認後に親が適用・永続キュー不使用)
   ▼
 規範が 3 層に定着
@@ -60,7 +61,7 @@ memory の参照も記録 ── touch_memory_on_read.py → telemetry/memory_to
 
 self-improvement は放っておくと「失敗 → memory を 1 枚足す」と**加算**に偏る。これを是正する 3 系統が責務を分けて働く:
 
-- **self-reflection**（per-session・加算）— 1 セッションから学びを memory/hook に落とす。subject 固定。
+- **self-reflection**（per-session）— 1 セッションの学びで、誤りを生んだ規則・道具・手順を書き換える（書き換える先が無いときだけ memory/hook）。subject 固定。
 - **rule-auditor**（cross-corpus・**使用量 GC**・量的）— 0 発火 hook / 未読 memory / queue 滞留を列挙し deprecation 候補。「何が死んでるか」。
 - **root-cause-auditor**（cross-corpus + cross-mechanism・**correctness 監査**・質的）— フック等実装 / memory 記載 / 機構設計の **誤り・band-aid・意図乖離** を検知し「**そもそも正しいか?**」を提起、根本修正を提案する（今回の global correction queue 退役+二層再設計が原型）。設計: [design-root-cause-auditor.md](design-root-cause-auditor.md)。判断のみ・自動改変ゼロ・human-gate。
 
@@ -159,3 +160,14 @@ env `FRAME_SIGNALS_FILE` で読み込み先を差し替えられる（テスト�
 - 各スクリプトのパスは `CLAUDE_PROJECT_DIR` 環境変数（hook 実行時に harness が供給）から導出する。手動実行時はプロジェクトルートを cwd にするか env を設定する（[.claude/hooks/_paths.py](../.claude/hooks/_paths.py)）。
 - 校正値を持つ hook（例: `block_memory_duplicate.py` の類似度閾値）は原環境 corpus 由来の初期値で動き出す。docstring の再導出手順に従い、自環境の memory が育ったら再校正する。
 - memory の**実体**は [heaven/memory/](../heaven/memory/) に置き、Claude Code の auto-memory 規約パス `~/.claude/projects/<slug>/memory/` からそこへ symlink を張る（手順は [heaven/README.md](../heaven/README.md)）。これでループが蓄積する memory の持ち運び・バックアップの単位がリポジトリディレクトリに揃う。ただし内容はユーザー固有なので**ローカル層**（git 管理外 — `.gitignore` の `/heaven/memory/*`）であり、commit はしない。index（`MEMORY.md`）は `# Memory Index` 見出しと 1 行ポインタだけを持つ — 本文を index に書かない（肥大は `block_memory_index_bloat.py` が検知する）。
+
+## Skill の改訂
+
+Skill を使った作業で起きた誤り（検査の NG・レビュー役の指摘・user の差し戻し・やり直しの周回）は、user の訂正や acceptance を待たず、その作業を閉じる前に親が処理する。規則は `.claude/rules/common/skill-revision.md`（常時読み込み・作業の完了報告の瞬間に効く）。振り返りの係が後から見つけたものは `kind=skill-edit` の PROPOSAL で返る。
+
+- **手段は誤りの起き方から選ぶ**: 検査を前に出す／出す側の道具を直す／検査で止める（自動で直す機能も）／手順の組み方を変える／誤りを出した係がその瞬間に読む文を書き換える／古い・食い違う指示を消す・まとめる、を全部比べ、効く中で最も上流のものを選ぶ。言われた手段・前回の手段をそのまま採らない。
+- **足さずに直す**: 同じ趣旨の行を書き換える。経緯の段落・日付・別ファイルの一覧として積まない。経緯はプロジェクトの経緯ファイルへ。
+- **効いたかを測る**: 誤りが出た実物で止まる・消えることと、今ある成果物を誤って止めないことを確かめてから「直した」と言う。
+
+経緯: 2026-10-21、ある Skill で作る文書の通し読みの指摘が毎回同じ種類で 3〜5 周していた。振り返りの係の直す先に既存 Skill の本文・道具が無く、指摘はループに入らず、改善は親が Skill に経緯の段落を手で足すか memory に積むだけだった。user から、積んでも読まれないこと、言われた手法だけを入れていることを指摘された。
+同日、この規則の最初の適用で、ジェムの書き方を guide.json だけ直して「PDF に新しい形が 78 か所出た」で確かめ、md に写された古い形が PDF に 30 か所残っていた。規則の 4 を「最終の成果物で誤りの形が 0 件になったことを数える・値の写しをたどる」に書き換えた。

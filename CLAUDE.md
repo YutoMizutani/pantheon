@@ -67,7 +67,7 @@
 
 ## 全体方針（機構）
 
-このリポジトリには自己改善ループが配線されている（訂正検出 → reflection → memory/hook 化 → telemetry → 棚卸し）。全体像は [docs/self-improvement-loop.md](docs/self-improvement-loop.md)。ユーザーから訂正を受けたら、その学びは会話で終わらせず memory / hook として定着させること。
+このリポジトリには自己改善ループが配線されている（訂正検出 → reflection → 規則・道具・手順の書き換え → telemetry → 棚卸し）。全体像は [docs/self-improvement-loop.md](docs/self-improvement-loop.md)。ユーザーから訂正を受けたら、その学びは会話で終わらせず、誤りを生んだ規則・道具・手順そのものを書き換えるか消して定着させること。止めろと言われた物は仕組みごと消し、コメントアウト・停止の注記・memory 記録で済ませない。memory や hook を足すのは、書き換える先が無いときだけ。
 
 置き場は「誰が作ったか」でなく「どこまで効くか」で決め、**どのディレクトリに置くかで層が決まる**ようにする（同じディレクトリに置いて `.gitignore` / `.git/info/exclude` でファイル単位に分ける運用はしない — 判断されないまま漏れ、見つかるまで気づけないため）。[heaven/](heaven/) には Pantheon 全体に効くものだけを置く: `heaven/tools/` は Pantheon の仕組みそのもの（どの環境にも配る）、`heaven/lib/` はどのプロジェクトの知識も含まない手元の汎用部品、`heaven/memory/` は memory 実体。**特定のプロジェクトの知識を含む物は、作ったのがエージェントでも `projects/<name>/` に置く**（「いずれ汎用にする」は理由にならない。2 つ目のプロジェクトが実際に使い始めたら、知識を抜いて `heaven/lib/` へ上げる）。依存は `projects/` → `heaven/` の一方向で、`heaven/` のコードがプロジェクトのパスを指したら置き場の誤り。プロジェクトの skill / agent / hook をルートから使うときは plugin として登録する（[docs/new-project-setup.md](docs/new-project-setup.md)）。
 
