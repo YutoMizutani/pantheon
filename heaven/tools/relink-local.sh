@@ -41,6 +41,60 @@ if [[ -d .local/hooks ]]; then
     link ".claude/hooks/local/$(basename "$f")" "../../../.local/hooks/$(basename "$f")"
   done
 fi
+# 実体を移した・消した hook の symlink は張り先が無いまま残るので外す
+for lp in .claude/hooks/local/*; do
+  if [[ -L "$lp" && ! -e "$lp" && "$(readlink "$lp")" == ../../../.local/hooks/* ]]; then
+    rm "$lp"; echo "removed (張り先なし): $lp"
+  fi
+done
+
+# --- local rule 群: .local/rules/* → .claude/rules/local/ (harness は rules/ の下を再帰で読む) ---
+if [[ -d .local/rules ]]; then
+  for f in .local/rules/*.md; do
+    [[ -e "$f" ]] || continue
+    link ".claude/rules/local/$(basename "$f")" "../../../.local/rules/$(basename "$f")"
+  done
+fi
+
+# --- local skill / command: ユーザー単位の置き場 (~/.claude/skills・~/.claude/commands) へ ---
+#     .claude/skills/<名前> は 1 階層しか読まれず、フォルダで層を分けられない。plugin にすると呼び名が
+#     <plugin>:<名前> に変わる。手元だけの skill / command は名前を変えずに使えるよう、ユーザー単位の
+#     置き場から .local/ の実体へ symlink する (このマシンの他のリポジトリでも見える点は承知の上)。
+link_user() {   # link_user <~/.claude 側のパス> <実体の絶対パス>
+  local lp="$1" tgt="$2"
+  if [[ -e "$lp" && ! -L "$lp" ]]; then echo "SKIP (実体が存在): $lp"; return; fi
+  mkdir -p "$(dirname "$lp")"; ln -sfn "$tgt" "$lp"; echo "linked: $lp -> $tgt"
+}
+if [[ -d .local/skills ]]; then
+  for d in .local/skills/*/; do
+    [[ -f "${d}SKILL.md" ]] && link_user "$HOME/.claude/skills/$(basename "$d")" "$ROOT/${d%/}"
+  done
+fi
+if [[ -d .local/commands ]]; then
+  for f in .local/commands/*.md; do
+    [[ -e "$f" ]] && link_user "$HOME/.claude/commands/$(basename "$f")" "$ROOT/$f"
+  done
+fi
+
+# --- プロジェクトの skill / agent / hook をルートへ (opt-in・plugin として登録) ---
+#     ルートから起動したセッションには projects/<name>/.claude/skills|agents が読み込まれない
+#     (実測: ルート起動の Skill 一覧に projects/<name> の skill が載らず、ファイルを読んでも遅れて読み込まれない)。
+#     projects/.claude-plugin/marketplace.json に載せたプロジェクトの .claude/ を、手元の範囲 (--scope local) の
+#     plugin として登録する。plugin は元の場所から読まれ (cache の写しは使われない)、名前は <plugin>:<名前> になる。
+#     ルートの .claude/ に symlink を張ってファイル単位で exclude する方式はやめた (層をディレクトリで分けるため)。
+mk="projects/.claude-plugin/marketplace.json"
+if [[ -f "$mk" ]] && command -v claude >/dev/null; then
+  mk_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["name"])' "$mk")"
+  sl=".claude/settings.local.json"
+  # CLI は symlink の settings へ書かない (SymlinkWriteRefusedError)。書く間だけ実ファイルにし、.local へ戻す
+  restore=""
+  if [[ -L "$sl" && -f .local/settings.local.json ]]; then rm "$sl"; cp .local/settings.local.json "$sl"; restore=1; fi
+  claude plugin marketplace add "$ROOT/projects" --scope local >/dev/null 2>&1 || true
+  for p in $(python3 -c 'import json,sys; print(" ".join(x["name"] for x in json.load(open(sys.argv[1]))["plugins"]))' "$mk"); do
+    claude plugin install "$p@$mk_name" --scope local >/dev/null 2>&1 && echo "plugin: $p@$mk_name (local)" || echo "WARN: plugin $p@$mk_name を登録できない"
+  done
+  if [[ -n "$restore" ]]; then cp "$sl" .local/settings.local.json; rm "$sl"; link "$sl" ../.local/settings.local.json; fi
+fi
 
 # --- memory: SSoT は heaven/memory。.local からの可視 symlink を張り直す ---
 [[ -e heaven/memory ]] && link .local/memory ../heaven/memory
@@ -54,5 +108,12 @@ if [[ -d "$cdir" ]]; then
 else
   echo "NOTE: $cdir が無い — ~/.claude の memory link は初回 setup 完了後に再実行のこと"
 fi
+
+# --- 置き場と層の検査: 配る層のディレクトリをファイル単位で隠す行・heaven のコードがプロジェクトを指す行 ---
+python3 heaven/tools/layer_check.py | tail -1 || true
+
+# --- hook の行の検査: ファイルが無い行・「無ければ通す」形になっていない行 ---
+#     python3 <無いファイル> は exit 2 ＝「ツールを止める」になり、全セッションの全ツールが止まる
+python3 heaven/tools/hook_guard.py --check || echo "WARN: 上の行を直すこと（python3 heaven/tools/hook_guard.py で一括対応）"
 
 echo "done."

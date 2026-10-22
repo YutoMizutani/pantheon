@@ -69,7 +69,7 @@
 
 このリポジトリには自己改善ループが配線されている（訂正検出 → reflection → memory/hook 化 → telemetry → 棚卸し）。全体像は [docs/self-improvement-loop.md](docs/self-improvement-loop.md)。ユーザーから訂正を受けたら、その学びは会話で終わらせず memory / hook として定着させること。
 
-エージェント起源の成果物（memory 実体・自作ツール・実験）は [heaven/](heaven/) に置く。`projects/` はユーザーの持ち物、`heaven/` はエージェントの持ち物という区分を守る。
+置き場は「誰が作ったか」でなく「どこまで効くか」で決め、**どのディレクトリに置くかで層が決まる**ようにする（同じディレクトリに置いて `.gitignore` / `.git/info/exclude` でファイル単位に分ける運用はしない — 判断されないまま漏れ、見つかるまで気づけないため）。[heaven/](heaven/) には Pantheon 全体に効くものだけを置く: `heaven/tools/` は Pantheon の仕組みそのもの（どの環境にも配る）、`heaven/lib/` はどのプロジェクトの知識も含まない手元の汎用部品、`heaven/memory/` は memory 実体。**特定のプロジェクトの知識を含む物は、作ったのがエージェントでも `projects/<name>/` に置く**（「いずれ汎用にする」は理由にならない。2 つ目のプロジェクトが実際に使い始めたら、知識を抜いて `heaven/lib/` へ上げる）。依存は `projects/` → `heaven/` の一方向で、`heaven/` のコードがプロジェクトのパスを指したら置き場の誤り。プロジェクトの skill / agent / hook をルートから使うときは plugin として登録する（[docs/new-project-setup.md](docs/new-project-setup.md)）。
 
 同梱・配線済みなのは自己改善ループの**機構**だけ。過去の運用で効いた**規範の実例**（RED-first / 一次ソース監査 / tmp-retention 等）は [docs/recipes/](docs/recipes/) に非配線で置いてある — 同種の失敗をこの環境で観測したときに、採用を検討して提案すること（先回りで配線しない）。
 

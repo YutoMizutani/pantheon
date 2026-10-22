@@ -49,6 +49,8 @@
 
 # --- heaven/: エージェントの自由領域はローカルが既定。出荷する計器だけ frame ---
 /heaven/*
+# ローカル層 rule (実体は .local/rules。relink-local.sh が symlink を張る)
+/.claude/rules/local/
 !/heaven/README.md
 !/heaven/tools/
 !/heaven/memory/

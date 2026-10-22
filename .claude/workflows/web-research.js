@@ -305,6 +305,7 @@ ${claimsText}${primaryUrlsText}${projectText}${budgetText}
 3. candidate_sources の各 URL を **WebFetch または Bash(curl) で実際に 1 度 fetch** し、source_results に記録:
    - 成功したら source_type と content_excerpt (120 文字以上の逐語抜粋) を埋める
    - 403/404/405/timeout なら fetch_status にその値を入れ、**代替 URL / 別ドメイン / curl を最低 1 本試して** fallback_tried=true にする (失敗を黙って捨てない)
+   - x.com / twitter.com の投稿と、WebFetch で 402/403 になった URL は、**Bash で python3 heaven/tools/fetch_any.py <作業フォルダ> <名前> <URL> を必ず 1 回試す** (X の投稿は fxtwitter の API で取れる). これを試さずに取得不可と書かない
 4. fetch_success_count / fetch_fail_count を正確に集計
 
 ## 一次ソースの探し方
@@ -394,7 +395,7 @@ ${inventoryJson}
 1. candidate_sources を **WebFetch (or curl) で実取得**して読む. 命題を直接支持/否定する原文を探す
 2. 見つけた証拠を direct_evidence に逐語引用 (verbatim_quote). **フィールド名と値のペア** で示す (例: \`"maxLevel": 5\` / 「Swift Surge は10レベルで段階的にスケール」)
 3. 各証拠に confidence を付ける. **query 語がページに出ただけ / フィールド名と値の対応が曖昧** なら co_occurrence_warning=true
-4. fetch が 403/404/timeout なら fetch_failures に URL を記録し、**代替 URL/ドメイン/curl を最低 2 本試す**. 失敗を黙って別ソースで埋めない
+4. fetch が 403/404/timeout なら fetch_failures に URL を記録し、**代替 URL/ドメイン/curl を最低 2 本試す**. 失敗を黙って別ソースで埋めない. x.com / twitter.com の投稿と 402/403 の URL は、その 1 本に **Bash で python3 heaven/tools/fetch_any.py <作業フォルダ> <名前> <URL>** を必ず含める (X の投稿は fxtwitter の API で取れる)
 5. 確定できなければ verdict='unverified'. 推測で 'supported' にしない
 
 ## datamine を読むときの注意 (過去の誤読対策)
@@ -515,7 +516,7 @@ return {
   question,
   summary: `confirmed ${synthesis.confirmed.length} / unverified ${synthesis.unverified.length} / refuted ${synthesis.refuted.length}`,
   next_action: lowConfidence
-    ? '確度が低い (confirmed 0 or 未確認前提 3+). user に report を確度明示で提示し、追加の一次ソース取得可否を確認'
+    ? '確度が低い (confirmed 0 or 未確認前提 3+). 提示・成果物への反映の前に、unverified_assumptions_in_recommendation と unverified の各項目を Skill imozuru（引用元・リンク元・著者・公式の場を原文までたどる）で追う. 単一ソース依存・ドメインの帰属・数字の出所はリンクをたどれば決着しうるので「未確認」と注記して出さない. 追っても届かない項目（ログイン・有料・4 周）だけを確度明示で提示する'
     : '完了. orchestrator は report を user に提示. refuted があれば既存 reference/outputs の訂正を反映',
   inventory_summary: {
     claims: inventory.atomic_claims.length,

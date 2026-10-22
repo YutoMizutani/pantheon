@@ -15,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-HOOK = Path(__file__).resolve().parent.parent / "allow_tmp_rm.py"
+HOOK = Path(__file__).resolve().parent.parent / "local" / "allow_tmp_rm.py"  # 手元の層の hook
 LLM = str(Path(__file__).resolve().parents[3])  # repo root (env-derived, no hardcoded user path)
 
 
