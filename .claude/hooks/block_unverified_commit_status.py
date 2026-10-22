@@ -62,7 +62,8 @@ _STATUS_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"未コミット"),
     re.compile(r"コミット(?:は|が|を|も)?(?:不要|必要|要らない|いらない|済み?|していな|してな|されていな|されてな|対象|待ち)"),
     re.compile(r"commit\s*(?:するなら|したいなら|して(?:いい|ほしい|おく)|が必要|は?不要|対象|済)", re.IGNORECASE),
-    re.compile(r"gitignored|git\s*管理外|版管理外|バージョン管理外|管理対象外"),
+    # 「git 管理なし／されていない」も拾う（2026-10-15 sid 9ad723e6: 未確認の「git 管理なし」が素通り。「git 管理下」は拾わない）
+    re.compile(r"gitignored|git\s*管理(?:外|なし|無し|されていな|されてな|していな)|版管理外|バージョン管理(?:外|なし|無し)|管理対象外"),
     re.compile(r"(?:^|[^A-Za-z])(?:un)?tracked(?:[^A-Za-z]|$)", re.IGNORECASE),
     re.compile(r"追跡(?:対象|されて)"),
     re.compile(r"コミット対象|「commit\s*対象」"),
@@ -282,6 +283,13 @@ def main() -> int:
     # Assertive/grounded mentions are left to instruction (too FP-prone to block).
     hits = _speculative_hits(text)
     if not hits:
+        # 断定形は誤検出が多いので止めない。ただし「未確認・user 未言及」の断定は記録だけ取り、
+        # 件数と誤検出を測ってから止めるかを決める（2026-10-19 遡り振り返りの承認済み提案・sid 9ad723e6）。
+        assertive = _status_hits(text)
+        if (assertive and not git_check_ran and not _OK_MARKER.search(text)
+                and not (last_user and _USER_GIT_RAISED.search(last_user))):
+            _log(sid, assertive, blocked=False, text=text)
+            record_fire(_MEMORY_SLUG, "warn", count=len(assertive), context="assertive-unverified-audit")
         return 0
     # override marker (legit verified / meta).
     if _OK_MARKER.search(text):
