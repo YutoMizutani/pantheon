@@ -84,7 +84,6 @@ const LIVE_SIGNALS = [
   'hook_fires.jsonl raw fire records',
   'skill_gc.py exact-duplicate SKILL.md counts',
   'projects/*/SCOPE.md and ventures/INDEX.md checklist gaps',
-  'tbh-tool-watch route diff (new community pages)',
   'arch render --drift (stale diagrams, mtime-based)',
   'app/ directory existence per project (binary)',
   'dashboard task_runs button-press history (shell/kick only)',
@@ -128,7 +127,7 @@ const LENSES = [
   },
   {
     key: 'integration', type: 'integration', dark_ok: false, max: '2〜3',
-    anchor: 'activity-log の order events・tbh community ツール・app/ ディレクトリ存在・プロジェクト間 gap',
+    anchor: '活動ログのイベント・app/ ディレクトリ存在・プロジェクト間 gap',
     question: 'ユーザが2つのものを手で橋渡ししている箇所はどこか。繋げば1ステップになる統合は何か。',
   },
   {

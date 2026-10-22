@@ -78,7 +78,7 @@ export const meta = {
 //   question     : string   (required) 調査対象クエスチョン
 //   claims?      : string[] adversarial verify したい既存主張 (「Lv不問で+50%固定」等)
 //   primary_urls?: string[] 既知の一次ソース URL (datamine/wiki/公式). project CLAUDE.md の既定値を渡す
-//   project?     : string   プロジェクト名 (context 注入用. "taskbar-hero" 等)
+//   project?     : string   プロジェクト名 (context 注入用)
 //   budget?      : string   調査範囲 / 予算制約の宣言 ("datamine + wiki 最大10fetch" / "現SP=41" 等)
 //   max_parallel?: number   Research fan-out の上限 (default 5)
 // ============================================================

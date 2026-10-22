@@ -27,7 +27,7 @@ Opt-in (フレーム層に git で載せる場合): このファイル自体は�
     "command":"python3 $CLAUDE_PROJECT_DIR/heaven/tools/stall_detector.py --hook","timeout":20}]}]
 コードは git・有効化はローカル = signals.json と同じ二層 opt-in。
 """
-import os, sys, json, time, glob, re
+import os, sys, json, time, glob, re, tempfile
 from datetime import datetime
 
 REPO = os.environ.get("CLAUDE_PROJECT_DIR") or os.path.expanduser("~/Developer/llm")
@@ -224,18 +224,54 @@ def compute_stalls(ledger):
     return picked
 
 
+# load() が黙って捨てた異常をセッションに出すための持ち越し (dogfood: silent に壊れない)。
+WARNINGS = []
+
+
 def load():
     try:
-        return json.load(open(STATE))
-    except Exception:
+        with open(STATE, encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return {}                      # 初回起動。台帳がまだ無いのは正常。
+    except Exception as ex:
+        # 台帳が読めない = 異常。黙って空から作り直すと「なぜ履歴が消えたか」が誰にも見えない。
+        # 壊れた実体を退避して残し、警告を持ち越してから再構築する (自動復旧はするが無言ではやらない)。
+        broken = STATE + ".broken-" + time.strftime("%Y%m%d-%H%M%S")
+        try:
+            os.replace(STATE, broken)
+        except OSError:
+            broken = "(退避できず)"
+        WARNINGS.append(f"🪤 [stall-detector WARN] 台帳を読めないため作り直します "
+                        f"({type(ex).__name__}: {ex})。壊れた台帳の退避先: {broken}")
         return {}
 
 
 def save(state):
-    os.makedirs(os.path.dirname(STATE), exist_ok=True)
-    tmp = STATE + ".tmp"
-    json.dump(state, open(tmp, "w"), ensure_ascii=False, indent=1)
-    os.replace(tmp, STATE)
+    """台帳を原子的に置き換える。
+
+    一時ファイルは *呼び出しごとに一意な名前* で、置き換え先と同じディレクトリに作る:
+      - 一意な名前 = SessionStart が重なって 2 つ走っても互いの一時ファイルを奪わない
+        (固定名 `stall_ledger.json.tmp` は、先行側の os.replace が共有の一時ファイルを
+         持ち去り後発側が FileNotFoundError で落ちる原因だった)
+      - 同じディレクトリ = 同一ファイルシステムなので os.replace が原子的に成立する
+        (別 fs をまたぐと replace はコピー+削除になり原子性が崩れる)
+    """
+    d = os.path.dirname(STATE)
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=os.path.basename(STATE) + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False, indent=1)
+            fh.flush()
+            os.fsync(fh.fileno())      # 電源断/強制終了で中身が空の台帳になるのを防ぐ
+        os.replace(tmp, STATE)
+    except BaseException:
+        try:
+            os.unlink(tmp)             # 失敗しても自分の一時ファイルは残さない
+        except OSError:
+            pass
+        raise
 
 
 def scan():
@@ -284,12 +320,14 @@ def main():
             print(json.dumps(compute_stalls(load().get("ledger", {})), ensure_ascii=False, indent=1))
         elif arg == "--hook":
             text = surface(mark=True)
-            if text:
+            out = "\n".join(WARNINGS + ([text] if text else []))
+            if out:
                 print(json.dumps({"hookSpecificOutput": {
-                    "hookEventName": "SessionStart", "additionalContext": text}}, ensure_ascii=False))
+                    "hookEventName": "SessionStart", "additionalContext": out}}, ensure_ascii=False))
         else:  # --surface
             text = surface(mark=False)
-            print(text or "(no stalls)")
+            out = "\n".join(WARNINGS + ([text] if text else []))
+            print(out or "(no stalls)")
     except Exception as ex:
         # 自分の停止を silent にしない: hook 出力に loud に出す (dogfood)
         msg = f"🪤 [stall-detector ERROR] {type(ex).__name__}: {ex}"
