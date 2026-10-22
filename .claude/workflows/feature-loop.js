@@ -1,8 +1,7 @@
 /**
  * feature-loop workflow — プロジェクトを破壊せず価値を底上げする改善案(新機能/UX摩擦除去/統合)を
  *   実使用シグナルに根ざして生成する. 無指示 improve ループが test-coverage/重箱の隅に収束する
- *   構造問題への対策 (projects/llm/apps/feature-loop/SCOPE.md が設計記録, reference/usage-signal-contract.md が
- *   使用シグナル契約).
+ *   構造問題への対策.
  *
  * ==== 設計層 (4 要素) ====
  *   - タスク洗い出し : Gather(収集) / Diverge(発散) / Judge(判定) / Synthesize(統合) を独立 subagent に分解
@@ -51,8 +50,8 @@
  *      - observable-signal: budget.spent() / phase 別 token 内訳が /workflows で可視
  *
  * ==== 規範 / hook との関係 ====
- *   対応する規範: CLAUDE.md「プロセス設計フレーム」, projects/llm/apps/feature-loop/CLAUDE.md 設計原則 6 項
- *   対応する記録: projects/llm/apps/feature-loop/reference/usage-signal-contract.md (LIVE/DARK の SSoT)
+ *   対応する規範: CLAUDE.md「プロセス設計フレーム」
+ *   対応する記録: 下の LIVE_SIGNALS / DARK_SIGNALS（何が観測可能かの一覧）
  *   役割分担     : 契約 = 何が観測可能かの真実, workflow = それを quota+provenance+judge で価値方向に変換
  */
 
@@ -72,13 +71,10 @@ export const meta = {
 
 // ROOT は args parse 後に env 非依存で導出する (args.root || '.')。下の parsedArgs ブロック参照。
 
-// 使用シグナル契約 (projects/llm/apps/feature-loop/reference/usage-signal-contract.md) の LIVE/DARK 分類.
+// 使用シグナルの LIVE/DARK 分類.
 // Judge が案の grounding を機械照合するための SSoT のミラー. 契約更新時はここも更新する.
 const LIVE_SIGNALS = [
-  "activity-log kind='window' per-exe foreground minutes (query_apps_today)",
-  "activity-log kind='claude' session ship_paths/topic/project",
-  "activity-log kind='claude_turn' prompt_hint (200char)",
-  "activity-log kind='order' order events",
+  'activity log (optional, .local/activity-signals.md): per-app foreground time / recent work topics',
   'telemetry_report.py COLD hooks (instrumented, 0-fire in N days)',
   'rule_adoption_report.py not-internalized rules (re-firing same lesson)',
   'hook_fires.jsonl raw fire records',
@@ -117,7 +113,7 @@ const LENSES = [
   },
   {
     key: 'ux-friction-behavioral', type: 'ux-friction-removal', dark_ok: false, max: '2〜3',
-    anchor: 'activity-log の per-exe foreground 分・window 切替頻度(反復 short burst が friction proxy)',
+    anchor: '活動ログ（あれば）のアプリ別の前面時間・切替頻度(反復 short burst が friction proxy)',
     question: 'ユーザが時間や手数を費やしている反復操作・アプリ往復はどこか。それを縮める機能や自動化は何か。',
   },
   {
@@ -255,7 +251,7 @@ function divergePrompt(lens, proj, signalsJson) {
     'gather 済みシグナル(JSON): ' + signalsJson,
     '',
     '出力契約 (PROPOSALS_SCHEMA): 各案は title / type=' + lens.type + ' / grounding_signal{signal,source,provenance,evidence} / proposal / oracle / destructive / revert_plan。',
-    '- provenance: 観測データ(activity-log/telemetry の実値)に基づくなら observed、目的と現状の gap を読んだ推論なら inferred。偽装禁止。',
+    '- provenance: 観測データ(活動ログ/telemetry の実値)に基づくなら observed、目的と現状の gap を読んだ推論なら inferred。偽装禁止。',
     '- evidence: observed なら実値を引用(例「Chrome.exe 142分/日」)、inferred なら purpose と現状の具体的 gap を1文で。',
     '- oracle: 「ユーザ体験が良くなった」をどう測るか。内部品質(test/lint/カバレッジ)ではなくユーザ価値の観測手段を書く。',
     '- destructive=true なら revert_plan 必須(branch/worktree + 戻し手順)。',
@@ -323,9 +319,7 @@ const gatherPrompt = [
   '実行すること(パスは全て ' + ROOT + ' 基準。ROOT="." なら repo ルートからの相対):',
   '1. 目的: ' + ROOT + '/projects/' + project + '/CLAUDE.md の役割/目的セクション、' + ROOT + '/PROJECTS.md の該当1行。',
   '2. 現状: 同 project の SCOPE.md(あれば)の "- [ ]"/"- [x]"、outputs/ の最新 mtime、app/ の有無を ls で。',
-  '3. ユーザ実活動: activity-log SQLite を query。',
-  "   sqlite3 " + ROOT + "/.local/activity.sqlite \"SELECT ts,payload FROM events WHERE kind='claude' ORDER BY ts DESC LIMIT 30\" で最近の Claude 作業(project/topic/ship_paths)を見て対象 project 関連を抽出。",
-  '   foreground 上位 exe と概算分も取れれば(window kind を exe 集計、または activity-log の query_apps_today 相当)。',
+  '3. ユーザ実活動（任意）: ' + ROOT + '/.local/activity-signals.md があれば、そこに書かれた読み方で活動ログを query し、最近の作業と対象 project の関連・アプリ別の前面時間を抽出。無ければこの段は飛ばし、query_notes に「活動ログなし」と書く。',
   '4. LIVE シグナル: python3 ' + ROOT + '/heaven/tools/telemetry_report.py --days 30 (COLD hooks) と python3 ' + ROOT + '/heaven/tools/rule_adoption_report.py (not-internalized rules) を実行し、対象 project に関係する dead automation / 反復失敗を抽出。',
   '5. DARK 機会: 対象 project に該当する DARK シグナルを列挙(bootstrapping ネタ)。DARK 一覧: ' + JSON.stringify(DARK_SIGNALS),
   '',

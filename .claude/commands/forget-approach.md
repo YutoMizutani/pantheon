@@ -1,9 +1,9 @@
 ---
 description: 却下した手法/ツール、または user が「止めろ／やめろ」と言った機能・監視・通知の参照を repo-local（memory・gitignore済みの局所層を含む）から残らず除去し、再seedを断つ。止めるときはコメントアウト・「停止」注記・memory 記録で済ませず仕組みごと消す。stateless — 却下語を記録に書き戻さない
-argument-hint: "<却下した手法> と別名を列挙 (例: example-api.io io eapi)"
+argument-hint: "<却下した手法> と別名を列挙 (例: example-api.io eapi)"
 ---
 
-> v0 (2026-06-18)。設計は本環境の **example-api.io 削除トレース**（session 916abb0 / docs/incidents/2026-06-17-correction-queue-cross-session-drift.md / 作業記録）に接地。
+> v0 (2026-06-18)。設計は、却下した外部 API の参照を repo から消した実際の作業の記録に接地。
 > **未検証**: 実走 N=1。
 
 # forget-approach — 却下した手法を repo-local から残らず忘れる
@@ -18,13 +18,13 @@ argument-hint: "<却下した手法> と別名を列挙 (例: example-api.io io 
 
 ## 大原則（破ったら設計が崩れる）
 
-1. **却下語を新しい記録に書かない**（memory / blocklist / correction / 説明コメント）。書けば residue を自分で作る。io 削除直後に memory へ却下語を書き戻した silent 反復（activity-log 2026-06-17 L79「.io を消した直後にメモリに書き戻す」）の再演を禁じる。**このコマンドは stateless** — 状態ファイルを一切残さない。出力はチャットの ephemeral 報告と削除そのものだけ。
-2. **巻き添え削除をしない**。gitignore 配下は削除が不可逆。却下語を**併用/言及するだけで別ソースで稼働し続けるツール**を、名前一致だけで消さない（→ 手順3の分類）。io で example-wiki.net / example-maps.net スクレイパを誤削除しかけた実害がある。
+1. **却下語を新しい記録に書かない**（memory / blocklist / correction / 説明コメント）。書けば residue を自分で作る。io 削除直後に memory へ却下語を書き戻した silent 反復（消した直後にメモリへ書き戻した実例がある）の再演を禁じる。**このコマンドは stateless** — 状態ファイルを一切残さない。出力はチャットの ephemeral 報告と削除そのものだけ。
+2. **巻き添え削除をしない**。gitignore 配下は削除が不可逆。却下語を**併用/言及するだけで別ソースで稼働し続けるツール**を、名前一致だけで消さない（→ 手順3の分類）。却下語と同じ名前を含む別の取得元のスクレイパを、誤って消しかけた実害がある。
 3. **再seedの面だけを掃く**。context に載らない append-only/scratch（transcripts / `logs/` / `tmp/`）は対象外（→「到達できない残骸」）。
 
 ## 引数
 
-`$ARGUMENTS` から **却下対象とその別名を全て**取る（例: `example-api.io io eapi`）。
+`$ARGUMENTS` から **却下対象とその別名を全て**取る（例: `example-api.io eapi`）。
 **別名の自動推測はしない** — 不確実。`$ARGUMENTS` が空、または別名が網羅されているか不明なら、**先に user に別名を列挙してもらう**（「`1Password` なら `1pw` / `op` も対象か?」のように確認）。確定した別名を `.` を `\.` にエスケープして `|` 連結し、走査用 regex を作る。
 
 ## 手順
@@ -82,6 +82,6 @@ user に日本語で簡潔に: **削除した件数/ファイル** ・ **温存�
 ## 崩落モード（このセッションで実際に踏んだもの）
 
 1. **却下語を memory/記録に書き戻す** — 最重大。自分で residue を作る。やらない（大原則1）。
-2. **名前一致で稼働ツールを巻き添え削除** — io で example-wiki.net/example-maps.net を誤削除しかけた。「唯一の源か」確認を飛ばさない。
+2. **名前一致で稼働ツールを巻き添え削除** — 同じ名前を含む別の取得元を誤削除しかけた。「唯一の源か」確認を飛ばさない。
 3. **under-scope** — 単一 app に絞って repo 横断を怠る。io で user が2回差し戻した（「リポジトリ以下から削除しろ」）。既定は repo 横断。
 4. **gitignore-blind な grep** — 素の Grep ツール / `grep -r` は局所層（gitignore済み）に盲目で、消し残して「再発」を生む。必ず手順2の `rg --no-ignore-vcs --hidden`（[[feedback_grep_residual_refs_blind_to_gitignored_config]]）。

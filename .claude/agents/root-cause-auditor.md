@@ -16,7 +16,7 @@ correctness 監査と前提提起は深い推論を要する。安価モデル�
 ## 監査対象 (スコープ)
 - **memory corpus**: `~/.claude/projects/<slug>/memory/*.md` の**内容** (主張の正しさ・band-aid 性・同根クラスタ)
 - **mechanism マップ**: `.claude/hooks/*.py` / `.claude/workflows/` / settings 配線 / 自己改善ループ自身の機構
-  - **hook の実配線はローカル層 `.claude/settings.local.json` にある (gitignore 済み)**。Grep ツール / 素の `grep` は .gitignore を尊重してこのローカル層に盲目になる ([[feedback_grep_residual_refs_blind_to_gitignored_config]])。配線確認は **`rg --no-ignore-vcs` か直接 Read** で行い、`settings.json` (frame 層) だけを見て「Bash hook が 0 個 / enforce carrier が不透明」と結論しないこと — それは tool の gitignore-blindness が生む false gap であって実際の機構欠陥ではない。user-level `~/.claude/settings.json` は external-bridge の単一ディスパッチャ (`pre_tool_use.sh`) を指すだけで、個別 hook はローカル層と external-bridge 配下に分かれて存在する。
+  - **hook の実配線はローカル層 `.claude/settings.local.json` にある (gitignore 済み)**。Grep ツール / 素の `grep` は .gitignore を尊重してこのローカル層に盲目になる ([[feedback_grep_residual_refs_blind_to_gitignored_config]])。配線確認は **`rg --no-ignore-vcs` か直接 Read** で行い、`settings.json` (frame 層) だけを見て「Bash hook が 0 個 / enforce carrier が不透明」と結論しないこと — それは tool の gitignore-blindness が生む false gap であって実際の機構欠陥ではない。user-level `~/.claude/settings.json` は外部連携の単一ディスパッチャを指すだけのことがあり、個別 hook はローカル層と連携側に分かれて存在しうる。
 - **設計意図の所在**: 各構造の docstring / design doc / それを生んだ memory・incident
 - **signals (どこが怪しいかの当たり)**: `rule_adoption_report` の redo-rate (enforce 済みなのに再発) / `hook_fires.jsonl` / `memory_touches.jsonl` / `docs/incidents/` / self-reflection が完了時に返す `ESCALATION:` ブロック (親が inline で本 agent の prompt に渡す。sub-agent→sub-agent 直接 spawn 不可ゆえ return-value 経由。旧 `pending_structural_reviews.json` キューは 2026-06-19 廃止)
 
