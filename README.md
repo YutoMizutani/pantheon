@@ -2,85 +2,142 @@
 
 > 一つの窓口（メタエージェント）の奥に、専門エージェントたちが並ぶ万神殿。
 
-Claude Code で「複数の専門エージェントを 1 リポジトリで運用し、**運用しながら自己改善させる**」ためのフレーム。2 つの柱からなる:
+Claude Code を、コードだけでなくゲームの攻略・家計・調べもの・趣味の道具づくりにも使っていると、次のことが起きます。
 
-1. **ルーティング**: ルートの [CLAUDE.md](CLAUDE.md) がメタエージェントとして振る舞い、`projects/<name>/CLAUDE.md` を人格定義とする専門エージェントへ入力を振り分ける。
-2. **自己改善ループ**: ユーザーの訂正（「違う」）と受諾（「ok」完全一致）を hook が検出 → background reflection が memory / hook として規範化 → 全 hook の発火を telemetry に記録 → 効いていない規範を棚卸しツールと rule-auditor agent が退役提案する閉ループ。→ [docs/self-improvement-loop.md](docs/self-improvement-loop.md)
+- `~/.claude/CLAUDE.md` に何でも書き足すうちに、ゲーム攻略用の決まりがコーディング中にも読み込まれ、指示が混ざる。
+- 先週「違う、そうじゃない」と直したことを、今週また直している。
+- 足した決まりが本当に効いているのか、もう要らないのか、誰にも分からない。
 
-## 構成
+Pantheon は、1 つのリポジトリの中で **話題ごとに専門エージェントを切り替え**（ルーティング）、**訂正を受けるたびに決まり・道具・手順そのものを書き換えて育てる**（自己改善ループ）ための土台です。あなたが話す相手は常に 1 つの窓口だけで、どの専門家に回すかは窓口が判断します。
+
+## 使い始める
+
+`curl | sh` もセットアップ用スクリプトもありません。clone したリポジトリで Claude Code を開き、こう伝えるだけです。
 
 ```
-CLAUDE.md              # メタエージェント（ルーティングと機構のみ — フレーム層）
-CLAUDE.local.md        # ユーザー固有設定（プロジェクト一覧・個人原則 — ローカル層、git 管理外）
-CLAUDE.local.md.example  # ↑の雛形（セットアップ時にコピーされる）
-.gitignore             # 二層の境界を定義（下記「二層構造」参照）
-.ignore                # ripgrep ignore — 横断検索を安く保つ
-.claude/
-├── settings.json  # hook 配線（$CLAUDE_PROJECT_DIR ベース、コピーしてそのまま動く）
-├── hooks/         # 自己改善ループの「機構」hook のみを配線（tests/ 付き）
-│   ├── _paths.py                      # 環境導出のパス解決（ハードコード無し）
-│   ├── detect_correction_signal_v2.py # 訂正シグナル → AUTO-LEARN reflection 起動
-│   ├── detect_acceptance_signal.py    # 完了シグナル（ok 等の完全一致）→ META reflection
-│   ├── propose_claudemd_updates.py    # Stop 時に project CLAUDE.md 更新案を queue
-│   ├── _fire_counter.py / _memory_touch.py / touch_memory_on_read.py  # telemetry
-│   └── block_memory_duplicate.py / block_memory_index_bloat.py        # memory 衛生
-├── agents/rule-auditor.md             # 規範棚卸しエージェント
-└── rules/common/                      # 全プロジェクト共通ルール置き場（初期状態は空 — ループが育てる）
-heaven/            # エージェントの自由領域（projects/ はユーザーの持ち物、ここはエージェントの持ち物）
-├── memory/        # auto-memory の実体（ローカル層 — git 管理外）。~/.claude/projects/<slug>/memory
-│                  # からここへ symlink を張る → heaven/README.md
-└── tools/         # ループの棚卸し計器: telemetry_report / rule_adoption_report /
-                   # memory_adoption_report / memory_lint / skill_gc（tests 付き）
-docs/
-├── design-rationale.md        # 設計原理 — 3 つの核 / 3 層モデル / ループのデータ依存
-├── built-in-mechanisms.md     # 組み込み機構の機能説明（退役機構 / 条件付きルール / 自己修復 / memory 衛生）
-├── self-improvement-loop.md   # 自己改善ループの全体像（まずこれを読む）
-├── effective-rules.md         # 介入レシピカタログ — 原環境で効いた規範・設計理由・採用条件
-├── recipes/                   # レシピの実体（hooks / workflows / rules / tools）。配線されていない
-└── new-project-setup.md       # 新規プロジェクト作成手順・ルール適用条件と hook の仕様
-projects/
-└── example-infra/             # プロジェクトテンプレート（コピー元・骨格のみ）
-    ├── CLAUDE.md              # 人格・役割・禁止事項（必ず書き換える）
-    ├── .claude/               # settings.json の骨格のみ（拡張は必要時に自作）
-    └── context|tools|logs|outputs|reference|tmp/
+このリポジトリをセットアップして
 ```
+
+エージェントが `CLAUDE.local.md`（あなた専用の設定。雛形は [CLAUDE.local.md.example](CLAUDE.local.md.example)）を作り、あなたの運用方針を聞き取って埋め、memory の置き場の配線まで済ませます。以降の拡張も会話で頼みます。
+
+- 最初のプロジェクトを作る — 「`<話題>` 用のプロジェクトを作って」（雛形のコピー・人格定義の書き換え・一覧への追記までエージェントが行う）
+- `CLAUDE.local.md` の「全体方針」を自分の方針に合わせる — ここだけは人間の価値判断
+
+詳細は [docs/new-project-setup.md](docs/new-project-setup.md)。
+
+## 使っているときの流れ
+
+朝、「この装備どうする？」と話しかけると、窓口はそれがゲームの話だと判断し、`projects/<そのゲーム>/CLAUDE.md` に書かれた攻略担当の人格・禁止事項・調べ方に切り替えて答えます。あなたはプロジェクト名を指定しません。
+
+答えが的外れで「違う、それは前のシーズンの仕様」と返すと、hook がその訂正を検出し、裏で振り返りが走ります。振り返りは会話の中で謝って終わらせず、誤りを生んだ決まり・道具・手順を書き換えます。新しい決まりを足すのは、書き換える先が無いときだけです。
+
+すべての hook の発火は記録されます。何週間も一度も効いていない決まりは棚卸しの道具（`heaven/tools/`）と `rule-auditor` エージェントが「退役候補」として挙げ、決まりが増える一方になるのを防ぎます。
+
+夜、同じリポジトリで家計の CSV を整理するときは家計担当に切り替わり、ゲームの決まりは読み込まれません。
+
+## 何が嬉しいか
+
+### 話題ごとに頭が切り替わり、決まりが混ざらない
+
+人格・禁止事項・調べ方は `projects/<name>/CLAUDE.md` ごとに分かれ、ルートの `CLAUDE.md` はルーティングと全体方針しか持ちません。どの専門家に回すかは窓口が自動で判断するので、使う側はプロジェクトの存在を意識しなくて構いません。どれにも当てはまらない話題が続きそうなときは、窓口が新しいプロジェクトを作るか尋ねます。
+
+### 見なくてよいファイルを、人もエージェントも見ずに済む
+
+`projects/` はあなたの持ち物、[heaven/](heaven/) はエージェントの持ち物です。memory の実体・自己改善ループの計器・エージェントが自作した道具は heaven/ に置かれ、人が開く前提になっていません。あなたが普段眺める `projects/` には、あなたの成果物だけが並びます。エージェント側も、思考ログ・一時ファイル・ビルド成果物を [.ignore](.ignore) で横断検索から外しているので、探索のたびにそれらを読みません。
+
+### 共通の skill を、プロジェクトごとに書き換えずに調整できる（skill アドオン）
+
+どの環境にも同じ本文で配る skill に、「このプロジェクトではこの書式で積む」「この環境ではこの道具も使う」という追加手順を別ファイルで足せます。skill が呼ばれた直後に hook が差し込むので、skill 本体はそのまま、プロジェクトに合わせた動きになります。広い層（あなたの環境全体）から深い層（入れ子のプロジェクト）へ重ねていき、食い違えば深い方が勝ちます。→ [docs/skill-addons.md](docs/skill-addons.md)
+
+### プロジェクトをまたいで知見が貯まる
+
+memory は 1 つのリポジトリに 1 か所（`heaven/memory/`）なので、あるプロジェクトで受けた訂正から得た「判断の仕方」は、別のプロジェクトの会話でも効きます。どのプロジェクトにも効く決まりは `.claude/rules/common/` に、2 つ目のプロジェクトが使い始めた道具はプロジェクト固有の知識を抜いて共通の部品へ上げます。プロジェクトを増やすほど、新しいプロジェクトは最初から賢い状態で始まります。
+
+### 決まりは「気をつける」でなく、仕組みで守らせる
+
+言い方の誤りは hook で止め、判断の誤りは memory に落とします。過去の運用で効いた決まり（不具合はまず再現してから直す、外部の事実は一次ソースを取得してから書く、など）は [docs/recipes/](docs/recipes/) に配線しない状態で置いてあり、同じ失敗をあなたの環境で観測してから採用します。
+
+## よくある疑問
+
+### 「`~/.claude` があるのに、ルーティングやローカル層の分離は要るの？」
+
+要ります。理由は 2 つです。
+
+- **`~/.claude/CLAUDE.md` は全セッションに読み込まれます。** 話題ごとに違う決まりを全部そこへ書くと、無関係な決まりが常に文脈を占め、互いに干渉します。Pantheon はルートを薄く保ち、話題ごとの決まりはその話題のときだけ読み込みます。
+- **仕組みとあなたの設定を分けないと、仕組みだけを更新・共有できません。** Pantheon では、どの環境でも動く仕組み（フレーム層）は git で管理し、あなた固有の人格・プロジェクト一覧・memory（ローカル層）は `.local/` 1 か所に集めて git の管理外に置きます。だから `git pull` で仕組みを更新してもあなたの設定と衝突せず、別のマシンへは `.local/` を運ぶだけで移れます。
+
+### 「自己改善するループの仕組みなら、大手がもう出しているのでは？」
+
+ベンチマークやテストで良し悪しを測れる、同じ形で繰り返し回る作業なら、評価データを使う既存の手法の方が向いています。Pantheon が狙うのはその逆で、**一度きりで再現しない、人生や趣味のプロジェクト**です。シーズンごとに仕様が変わるゲーム、自分だけの家計、思いつきの道具づくりには評価データがなく、別のプロジェクトで得た改善もそのままでは効きません。Pantheon は、あなたの訂正そのものを評価の信号にし、効いたかどうかを発火記録で測り、効かない決まりを退役させます。
+
+### 「自分のプロジェクトに入れても、使いにくそう」
+
+あなたが触るのは会話だけです。
+
+- ルーティングは窓口が自動で判断するので、プロジェクト名を覚えたり指定したりする必要はありません。
+- 内部で育つ決まり・memory・道具はローカル層に入り、git の管理外のまま、あなたの使い方に合わせて書き換わっていきます。他人の運用に合わせた決まりを押し付けられることはありません。
+- 既存のコードを持つプロジェクトは `projects/<name>` の中で独自に git 管理でき、親リポジトリと衝突しません。
+
+### 「使わない方がいいのはどんなとき？」
+
+- **1 つのコードベースだけで Claude Code を使うとき。** 普通の `CLAUDE.md` で足ります。
+- **日本語を読まずに中身へ手を入れたいとき。** 会話は英語でも動きます（訂正・完了の合図の語彙は `signals.json` に自分で書く方式で、同梱の既定は空）。ただし README・docs・決まりの本文・同梱の語彙の雛形は日本語です。
+- **`python3` が無い環境。** hook は Python 3 の標準ライブラリだけで書かれています（`pip install` は不要）。
 
 ## 二層構造
 
-このリポジトリは「フレーム層 = git 管理」「ローカル層 = git 管理外」の二層で運用する。**実際に運用しながら、汎用的な改善だけを commit してフレームを育てる**ための構造で、境界は [.gitignore](.gitignore) が定義する。原則は **1 パス 1 オーナー** — どのパスもどちらか一方にだけ属し、同一パスを「リポジトリ版とローカル版で別内容」にしない。
+このリポジトリは「フレーム層 = git 管理」「ローカル層 = git 管理外」の二層で運用します。**実際に運用しながら、汎用的な改善だけをフレームに戻して育てる**ための構造で、境界は [.gitignore](.gitignore) が定義します。原則は **1 パス 1 オーナー** — どのパスもどちらか一方にだけ属し、同じパスを「リポジトリ版とローカル版で別内容」にしません。
 
 | 層 | 中身 | 例 |
 |---|---|---|
 | フレーム層（tracked） | どの環境でも通用する機構 | CLAUDE.md・hook・計器・docs・example-infra |
-| ローカル層（ignored） | この環境のユーザー固有の人格・状態 | CLAUDE.local.md・projects/*・heaven/memory/*・settings.local.json |
+| ローカル層（ignored） | この環境のユーザー固有の人格・状態 | `.local/`（CLAUDE.local.md・PROJECTS.md・settings.local.json・memory）・projects/* |
 
-- ルート直下とユーザー所有領域（`projects/` `heaven/`）は **ローカルが既定**: 運用中に増えた個人ファイルは commit 対象に現れない。
-- フレーム層ディレクトリ（`.claude/` `docs/` `heaven/tools/`）の内側は **tracked が既定**: 運用中に育てた hook / doc が `git status` に現れ、「commit してフレームを育てるか、ローカルに残すか」を判断する動線になる。
+- ローカル層の実体は `.local/` 1 か所に集め、harness が決まったパスで読む場所（root の `CLAUDE.local.md` など）へは symlink を張ります。別マシンへの移植は「clone → `.local/` を配置 → `bash heaven/tools/relink-local.sh`」の 3 手です（→ [.local/README.md](.local/README.md)）。
+- ルート直下とユーザー所有領域（`projects/` `heaven/`）は **ローカルが既定**: 運用中に増えた個人ファイルは `git status` に現れません。
+- フレーム層ディレクトリ（`.claude/` `docs/` `heaven/tools/`）の内側は **tracked が既定**: 運用中に育てた hook や doc が `git status` に現れ、「フレームに戻すか、ローカルに残すか」を判断するきっかけになります。
 - 環境固有の ignore 追加は `.gitignore` でなく `.git/info/exclude` へ（`.gitignore` 自体がフレーム層のため）。
 
-## Install
+## 中身
 
-No `curl | sh`, no setup script — just tell Claude: `このリポジトリをセットアップして`
+```
+CLAUDE.md                # メタエージェント（ルーティングと機構のみ — フレーム層）
+CLAUDE.local.md.example  # ローカル層の CLAUDE.local.md の雛形（セットアップ時にコピーされる）
+.local/README.md         # ローカル層の置き場の目印（中身は git 管理外）
+.gitignore / .ignore     # 二層の境界 / 横断検索から外す物
+.claude/
+├── settings.json        # hook 配線（$CLAUDE_PROJECT_DIR ベース）
+├── hooks/               # 自己改善ループと衛生の hook（tests/ 付き）
+├── agents/              # 振り返り（self-reflection）・棚卸し（rule-auditor）・構造監査（root-cause-auditor）
+├── skills/ commands/ workflows/   # 同梱の skill・コマンド・workflow
+└── rules/common/        # 全プロジェクト共通ルール（ループが育てる）
+plugins/                 # 入れた物だけが効く opt-in 機能（.claude-plugin/marketplace.json から導入）
+heaven/                  # エージェントの持ち物
+├── memory/              # auto-memory の実体（ローカル層）
+└── tools/               # ループの計器・セッション管理などの仕組み
+docs/
+├── self-improvement-loop.md   # 自己改善ループの全体像（まずこれを読む）
+├── design-rationale.md        # 設計原理
+├── built-in-mechanisms.md     # 組み込み機構の機能説明
+├── effective-rules.md         # 原環境で効いた規範のカタログ
+├── recipes/                   # その実体（配線されていない）
+├── skill-addons.md            # skill アドオンの仕組み
+└── new-project-setup.md       # 新規プロジェクト作成・ルール適用条件の仕様
+projects/
+└── example-infra/             # プロジェクトの雛形（コピー元・骨格のみ）
+```
 
-セットアップでエージェントが `CLAUDE.local.md` の作成（雛形: [CLAUDE.local.md.example](CLAUDE.local.md.example)）と memory symlink の配線まで行う。
+<details>
+<summary><b>設計原則</b>（作り手向け）</summary>
 
-## Usage
-
-人間が手を動かすのは Install まで。以降の拡張も会話で依頼する:
-
-- 最初のプロジェクトを作る — 「`<ドメイン>` 用のプロジェクトを作って」（example-infra のコピー・CLAUDE.md 書き換え・`CLAUDE.local.md` の一覧への追記までエージェントの仕事）
-- `CLAUDE.local.md` の「全体方針（ユーザー固有の原則）」を自分の運用方針に合わせて埋める（ここだけは人間の価値判断）
-
-詳細は [docs/new-project-setup.md](docs/new-project-setup.md)。
-
-## 設計原則
-
-- **二層構造（1 パス 1 オーナー）**: フレーム層（tracked = 汎用機構）とローカル層（ignored = ユーザー固有の人格・状態）を `.gitignore` で分離し、実運用から汎用的な改善だけを commit する。→ 上記「二層構造」
-- **配線するのは機構、産物はレシピ**: settings.json に配線して出荷するのは自己改善ループの機構（検出 / reflection / telemetry / memory 衛生 / 棚卸し）だけ。原環境の失敗から育った規範（RED-first / 一次ソース監査 / tmp-retention 等）は [docs/recipes/](docs/recipes/) に採用条件付きの非配線レシピとして置き、**同じ失敗を自環境で観測してから**採用する（measure-first）。これにより telemetry の cold 判定が「まだ失敗していないだけ」と「この環境では効かない」を混同せず、棚卸しが初日から機能する。
-- **校正値は再導出手順とセット**: 機構は移植できるが、閾値（類似度・行数上限など）は原環境の corpus で校正された定数であり移植できない。校正値を持つ hook は docstring に再導出手順を持つ — 定数だけを信じない。
-- **ルーティングの単一インデックス**: プロジェクト一覧は `CLAUDE.local.md` の「既存プロジェクト一覧」節だけに書く（更新箇所を 1 つに保つ。一覧はユーザー固有なのでローカル層）。
+- **二層構造（1 パス 1 オーナー）**: フレーム層（tracked = 汎用機構）とローカル層（ignored = ユーザー固有の人格・状態）を `.gitignore` で分離し、実運用から汎用的な改善だけを戻す。→ 上記「二層構造」
+- **配線するのは機構、産物はレシピ**: settings.json に配線して出荷するのは自己改善ループの機構（検出 / 振り返り / 発火記録 / memory 衛生 / 棚卸し）だけ。原環境の失敗から育った規範は [docs/recipes/](docs/recipes/) に採用条件付きの非配線レシピとして置き、**同じ失敗を自環境で観測してから**採用する。これにより発火記録の「一度も効いていない」が「まだ失敗していないだけ」と「この環境では効かない」を混同せず、棚卸しが初日から機能する。
+- **校正値は再導出手順とセット**: 機構は移植できるが、閾値（類似度・行数上限など）は原環境のデータで校正された定数であり移植できない。校正値を持つ hook は docstring に再導出手順を持つ。
+- **ルーティングの単一インデックス**: プロジェクト一覧はローカル層の 1 か所だけに書く（更新箇所を 1 つに保つ）。
 - **ルートは薄く**: ルート CLAUDE.md にはルーティングと抽象方針のみ。具体ルールは各プロジェクトの `CLAUDE.md` / `.claude/rules/` へ。
-- **規範は構造で enforce**: 「気をつける」を増やすのではなく、saying-fault は hook、judgement-fault は memory に落とす。増やした規範は telemetry で計測し、効いていないものは退役させる。→ [docs/self-improvement-loop.md](docs/self-improvement-loop.md)
+- **規範は構造で守らせる**: 言い方の誤りは hook、判断の誤りは memory に落とす。増やした規範は発火記録で計測し、効いていないものは退役させる。→ [docs/self-improvement-loop.md](docs/self-improvement-loop.md)
 - **ルールの適用条件**: ファイル単位（frontmatter `paths:`）とセクション単位（`<important if="...">`）の 2 段階で、ルールが効く範囲を指定できる。仕様は [docs/new-project-setup.md](docs/new-project-setup.md)。
-- **プロジェクト単位の git**: 親リポジトリ（このフレーム）が track するのはフレーム層だけで、`projects/*` はローカル層として ignore される（example-infra を除く）。したがってコード資産を持つプロジェクトは `projects/<name>` 単位で独自に git 管理してよく、親 repo と衝突しない。公開したいプロジェクトがある場合のみ、自分の fork で `.gitignore` に `!/projects/<name>/` を追記する。
-- **拡張は同梱せず自作で育てる**: テンプレートは骨格のみで、拡張（agents / commands / skills / rules / hooks）を同梱しない。必要になったものだけを自作し、自己改善ループで育てる（外部の agent 集を使いたい場合は各プロジェクト配下に clone すればよい）。書き方の仕様は [docs/new-project-setup.md](docs/new-project-setup.md)、実働の見本はルートの `.claude/`。
+- **プロジェクト単位の git**: 親リポジトリが track するのはフレーム層だけで、`projects/*` はローカル層として ignore される（example-infra を除く）。コード資産を持つプロジェクトは `projects/<name>` 単位で独自に git 管理してよい。公開したいプロジェクトがある場合のみ、自分の fork で `.gitignore` に `!/projects/<name>/` を追記する。
+- **拡張は同梱せず自作で育てる**: プロジェクトの雛形は骨格のみ。必要になったもの（agents / commands / skills / rules / hooks）だけを自作し、自己改善ループで育てる。書き方の仕様は [docs/new-project-setup.md](docs/new-project-setup.md)、実働の見本はルートの `.claude/`。
+
+</details>
