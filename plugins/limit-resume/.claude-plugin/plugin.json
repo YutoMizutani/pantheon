@@ -1,0 +1,7 @@
+{
+  "name": "limit-resume",
+  "version": "0.1.0",
+  "description": "利用上限で止まったセッションを、解除後に同じ窓で自動再開する（上限に当たったセッションだけ・解除が 12 時間より先なら捨てる）",
+  "author": { "name": "Pantheon" },
+  "keywords": ["rate-limit", "resume", "session"]
+}
