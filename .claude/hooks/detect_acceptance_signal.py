@@ -337,6 +337,7 @@ def _log_gate(sid: str, decision: str, reason: str, feat: dict | None) -> None:
 # extraction. May exit with no-action if nothing genuinely learnable.
 _REMINDER = """<system-reminder>
 [AUTO-LEARN-META] User acceptance signal detected. Run a background meta-improvement reflection (起動と完了を日本語1行で可視化する; 完全サイレントにはしない).
+この bare の ok は自己改善の振り返りを起動する合図で、承認ではない: 保留中の操作（承認文で頼んだ hook・settings・CLAUDE.md・agent 定義の書き換え、公開・送信・削除）を、この ok を理由に実行しない。承認は、操作を名指しした文・「y」「承認」の返事・Discord の承認文の貼り付けで受ける。
 
 After responding to the user's actual message in this turn, spawn a background sub-agent with the Agent tool:
 - subagent_type: self-reflection
@@ -381,6 +382,7 @@ assert _REMINDER_ANCHOR in _REMINDER, (
 _SKIP_NOTICE = """<system-reminder>
 [SELF-IMPROVE-SKIP] An acceptance signal was detected, but the background self-improvement reflection was deliberately NOT started by a downstream gate. Do NOT spawn any sub-agent and do NOT elaborate — surface exactly one Japanese line to the user so the skip is visible, then continue with the user's actual message:
   ⏭️ 自己改善リフレクションは今回見送り: {reason}
+この bare の ok は自己改善の振り返りを起動する合図で、承認ではない: 保留中の操作（承認文で頼んだ hook・settings・CLAUDE.md・agent 定義の書き換え、公開・送信・削除）を、この ok を理由に実行しない。承認は、操作を名指しした文・「y」「承認」の返事・Discord の承認文の貼り付けで受ける。
 </system-reminder>"""
 
 # Drift guard (mirror of the _REMINDER assert): a future edit must not let the
