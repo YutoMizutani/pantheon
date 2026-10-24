@@ -122,7 +122,7 @@
 **3 層**:
 - CLAUDE.md: なし
 - Memory: `feedback_cross_check_evidence_before_destructive_plan.md`
-- Hook: `block_evidence_jump.py` (本フレーム未同梱 — レシピとして記載) — Stop 時に「N だけ起動」「残り N は消失」「壊れた」「provider 切替」など entity-disappearance / destructive-remediation switch phrase を検知
+- Hook: `block_evidence_jump.py` (本フレーム同梱・非配線 — 配線はローカル層の `settings.local.json`) — Stop 時に「N だけ起動」「残り N は消失」「壊れた」「provider 切替」など entity-disappearance / destructive-remediation switch phrase を検知
 
 **効いている根拠**: 原環境での VSCode tunnel 復旧時に `pid_count` を見ながらウィンドウ消失を誤 diagnose した事故から導出。導入後、同型の「単一シグナル過信」は本人観測で再発なし。
 
@@ -141,7 +141,7 @@
 **3 層**:
 - CLAUDE.md: なし
 - Memory: `feedback_no_v1_declaration_before_git_remote.md`
-- Hook: `block_version_tokens.py` (本フレーム未同梱 — レシピとして記載) — PreToolUse on `Write|Edit` で `v1.0` / `Status: ... (YYYY-MM-DD)` / `RFC YYYY-MM-DD` などを正規表現 block
+- Hook: `block_version_tokens.py` (2026-10-25 退役 — `.claude/hooks/.archive/`。発火条件「cwd の repo に remote が無い」が remote のある repo では成立しない) — PreToolUse on `Write|Edit` で `v1.0` / `Status: ... (YYYY-MM-DD)` / `RFC YYYY-MM-DD` などを正規表現 block
 
 **効いている根拠**: 原環境で 130+ 箇所の一括削除を user から依頼された痛みが background。導入後、Edit 時に hook が即座に block するため再混入が観測されなくなった (saying-fault の典型例)。
 
@@ -289,7 +289,7 @@
 | MUST | 役割逆転禁止 | CLAUDE.md 節 + memory + `block_hedged_concerns.py` |
 | MUST | 2 回目の同じ失敗で即停止 | CLAUDE.md 節 + memory |
 | MUST | Verify-before-claim | memory + `block_hedged_concerns.py` (役割逆転と共有) |
-| SHOULD | No version tokens | memory + `block_version_tokens.py` |
+| SHOULD | No version tokens | memory（`block_version_tokens.py` は 2026-10-25 退役・`.archive/`） |
 | SHOULD | No gitignored refs | memory + `block_repo_root_artifacts.py` |
 | SHOULD | Strip user names | memory + `strip_user_names.py` |
 | OPTIONAL | Cross-check evidence | memory + `block_evidence_jump.py` |
@@ -314,9 +314,9 @@
 | `mask_home_in_text.py` | Stop / PostToolUse | (all) | レシピ (非配線) |
 | `strip_user_names.py` | Stop / PostToolUse | (all) | レシピ (非配線) |
 | `detect_correction_signal_v2.py` | UserPromptSubmit | (all) | ✅ (配線済み) |
-| `block_version_tokens.py` | PreToolUse | `Write\|Edit` | レシピ (未同梱) |
+| `block_version_tokens.py` | PreToolUse | `Write\|Edit` | 退役 (2026-10-25、`.archive/`) |
 | `block_repo_root_artifacts.py` | PreToolUse | `Write\|Edit\|MultiEdit\|NotebookEdit\|Bash` | レシピ (未同梱) |
-| `block_evidence_jump.py` | Stop | (all) | レシピ (未同梱) |
+| `block_evidence_jump.py` | Stop | (all) | レシピ (非配線) |
 | `audit_dangling_script_announcement.py` | Stop | (all) | レシピ (未同梱) |
 
 ---
