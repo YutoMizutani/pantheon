@@ -34,6 +34,9 @@ link() {
 [[ -e .local/PROJECTS.md         ]] && link PROJECTS.md                 .local/PROJECTS.md
 [[ -e .local/settings.local.json ]] && link .claude/settings.local.json ../.local/settings.local.json
 
+# --- git の hook (.githooks/: 個人情報・ローカル層の中身を公開側へ入れない pre-commit 等) ---
+git config core.hooksPath .githooks && echo "git: core.hooksPath = .githooks"
+
 # --- local hook 群 (ユーザー固有・汎用走査。frame の *.example / README は触らない) ---
 if [[ -d .local/hooks ]]; then
   for f in .local/hooks/*; do

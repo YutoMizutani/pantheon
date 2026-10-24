@@ -1,0 +1,25 @@
+#!/bin/sh
+# pre-commit ゲート。Claude Code の hook は通常の git 操作には効かない盲点の手当て。
+# 有効にする: git config core.hooksPath .githooks（relink-local.sh も設定する）。git は clone しただけでは hook を有効にしない。
+#   1. stage した .py の構文 (py_compile)
+#   2. tracked への home パス直書き混入 (test_no_hardcoded_home_in_tracked.py)
+#   3. 個人情報・個人の作業履歴・ローカル層の中身の混入 (precommit_privacy.py。2 段目は claude -p)
+# フォーマッタは導入しない (repo に formatter 設定が無く、一括再整形の差分崩れを避ける)。
+set -e
+repo_root="$(git rev-parse --show-toplevel)"
+
+staged_py=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+if [ -n "$staged_py" ]; then
+  for f in $staged_py; do
+    python3 -m py_compile "$repo_root/$f" || {
+      echo "pre-commit: 構文エラー: $f" >&2; exit 1; }
+  done
+fi
+
+python3 "$repo_root/.claude/hooks/tests/test_no_hardcoded_home_in_tracked.py" >/dev/null || {
+  echo "pre-commit: tracked に home パス直書きが混入 (詳細: python3 .claude/hooks/tests/test_no_hardcoded_home_in_tracked.py)" >&2
+  exit 1
+}
+
+python3 "$repo_root/heaven/tools/precommit_privacy.py" || exit 1
+exit 0
