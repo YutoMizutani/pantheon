@@ -200,13 +200,16 @@ def main() -> None:
         return
 
     tgt = ", ".join(dict.fromkeys(scratch_targets))
+    # 例示は実際の対象から作る（対象が system /tmp なのに repo の tmp の形を示していた）
+    m = re.search(r"\(= (/[^)]+)\)|^(/\S+)", scratch_targets[0])
+    example = (m.group(1) or m.group(2)) if m else f"{PANTHEON_ROOT}/<...>/tmp/<dir>"
     _emit_deny(
         "複合コマンド内の scratch tmp への `rm -rf` を止めました（auto-mode の承認ゲートで"
         "止まる原因 — allow_tmp_rm は単独・絶対パスの rm しか自動承認できません）。\n"
         f"対象: {tgt}\n\n"
         "fallback（user に承認を頼まず自己完結する手順）:\n"
         "  1) 削除だけを単独・絶対パスで実行 → allow_tmp_rm が自動承認:\n"
-        f"       rm -rf {PANTHEON_ROOT}/<...>/tmp/<dir>\n"
+        f"       rm -rf {example}\n"
         "     （repo 内 tmp も system /tmp 配下も、単独・絶対パスなら allow_tmp_rm が自動承認。"
         "変数や相対でなく絶対パスを直書きする）\n"
         "  2) mkdir / heredoc などの再構築は rm を含まない別コマンドで実行（ゲート不要）。\n\n"

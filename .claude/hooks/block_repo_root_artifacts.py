@@ -201,12 +201,32 @@ def _relative_root_hits(command: str) -> list[str]:
     return hits
 
 
+# An absolute root path that names an EXISTING file is only an offender when it
+# is the target of a write (redirect / tee / touch / cp・mv・ln dest / -o).
+# Mixed commands that append to projects/<name>/TODO.md and then `ls` the root
+# TODO.md to confirm it was not touched were denied (the read-only `ls`
+# segment, not the write, named the root path). Paths that do
+# not exist yet keep the broad match — any mention in a non-read-only command may
+# create them (python open(..., "w"), curl, scripts).
+_ABS_WRITE_RE = re.compile(
+    r"(?:\d?>{1,2}\s*|\btee\s+(?:-a\s+)?|\btouch\s+(?:-\S+\s+)*"
+    r"|\b(?:cp|mv|ln)\s+(?:-\S+\s+)*\S+\s+|(?:\s-o|--output)\s+)"
+    r"['\"]?(" + re.escape(REPO_ROOT) + r"/[^/\s'\";|&<>(){}]+)"
+)
+
+
 def _bash_targets(command: str) -> list[str]:
     if not command:
         return []
     if _is_readonly_command(command):
         return []
-    return [m.group(1) for m in _PATH_RE.finditer(command)] + _relative_root_hits(command)
+    stripped = _HARMLESS_REDIR_RE.sub(" ", command)
+    write_abs = {m.group(1) for m in _ABS_WRITE_RE.finditer(stripped)}
+    abs_hits = [
+        p for p in (m.group(1) for m in _PATH_RE.finditer(command))
+        if p in write_abs or not os.path.isfile(p)
+    ]
+    return abs_hits + _relative_root_hits(command)
 
 
 def _extract_targets(tool: str, tool_input: dict) -> list[str]:

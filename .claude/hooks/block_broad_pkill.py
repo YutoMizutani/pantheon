@@ -27,6 +27,13 @@ import shlex
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _fire_counter import record_fire  # noqa: E402
+except Exception:  # pragma: no cover - counter is best-effort
+    def record_fire(*_a, **_k):
+        return None
+
 _GENERIC = {
     "python", "python3", "python2", "node", "bun", "deno", "ruby", "perl", "bash", "sh", "zsh",
     "java", "claude", "npm", "npx", "uv", "pip", "go", "php",
@@ -199,6 +206,7 @@ def main() -> None:
                 "（取引所の制限などの取り合いなら、自分の要求を相手の待ちの隙間に入れる）。"
                 "\nuser が停止を明示したときだけ `# KILL-OTHER-SESSION-OK: <user の発言>` を付けて再実行。\n"
             )
+            record_fire("block_broad_pkill", "block", context=cmd[:120])
             sys.exit(2)
     if _MARKER not in cmd:
         indirect = _broad_pgrep_into_kill(cmd) + _script_kill_hits(cmd)
@@ -210,6 +218,7 @@ def main() -> None:
                 "スクリプトを書き換えたら、実行は別の呼び出しに分けて中身を確かめてから。"
                 "\n範囲を確かめた上でどうしても必要なら `# PKILL-SCOPED-OK: <根拠>` を付ける。\n"
             )
+            record_fire("block_broad_pkill", "block", context=cmd[:120])
             sys.exit(2)
     if ("pkill" not in cmd and "killall" not in cmd) or _MARKER in cmd:
         return
@@ -227,6 +236,7 @@ def main() -> None:
         "を `kill <pid>` で止める。パターンを使うならスクリプトのパスなど自分の物と特定できる語を入れる。"
         "\n範囲を確かめた上でどうしても必要なら `# PKILL-SCOPED-OK: <根拠>` を付ける。\n"
     )
+    record_fire("block_broad_pkill", "block", context=cmd[:120])
     sys.exit(2)
 
 

@@ -181,6 +181,32 @@ def _rebuild_input(tool: str, tool_input: dict) -> tuple[dict | None, int, bool]
     return (ui if total else None), total, ok
 
 
+def _dropped_tails_notice(tool: str, before: dict, after: dict) -> str:
+    """List what auto-truncation cut from each index line, so the caller can
+    judge on the spot whether the core meaning was lost (no Read/grep needed)."""
+    def lines(ti: dict) -> list[str]:
+        if tool == "Write":
+            return str(ti.get("content") or "").splitlines()
+        if isinstance(ti.get("edits"), list):
+            out: list[str] = []
+            for e in ti["edits"]:
+                if isinstance(e, dict):
+                    out += str(e.get("new_string") or "").splitlines()
+            return out
+        return str(ti.get("new_string") or "").splitlines()
+    parts = []
+    for b, a in zip(lines(before), lines(after)):
+        if b != a and a.endswith(ELLIPSIS):
+            kept = a[: -len(ELLIPSIS)]
+            parts.append(f"\n- 切り捨てた末尾: 「{b[len(kept):].strip()}」")
+    if not parts:
+        return ""
+    return (
+        "\n切り捨てた部分 (Read し直さずにここで判断する。区別の核や道具名が入っていたら、"
+        "核を先頭側に置いて 200 字以内に言い換え 1 回だけ再 Edit):" + "".join(parts)
+    )
+
+
 def _emit_allow_with_input(updated_input: dict, notice: str) -> None:
     obj = {
         "hookSpecificOutput": {
@@ -251,6 +277,7 @@ def main() -> int:
                         "通しました (末尾を語境界で切り「…」付与)。切詰めで意味が欠けた行が"
                         "あれば 200 字以内で言い換えて再 Edit してください (任意・ブロックしません)。"
                         "詳細は対応する memory 本文が SSoT。"
+                        + _dropped_tails_notice(tool, tool_input, updated)
                     ),
                 )
                 return 0
