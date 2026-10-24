@@ -37,6 +37,12 @@ def bash_result(tu_id, is_error):
         {"type": "tool_result", "tool_use_id": tu_id, "is_error": is_error, "content": "out"}]}}
 
 
+def bash_masked(tu_id, out):
+    """`| tail` で終了コードが 0 に握り潰された結果（is_error=false、出力にだけ失敗が残る）"""
+    return {"type": "user", "message": {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": tu_id, "is_error": False, "content": out}]}}
+
+
 def say(text):
     return {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}
 
@@ -65,6 +71,12 @@ def decision(parent, sub=None, agent_id=None) -> str:
 
 PARENT_BUG_NO_RED = [user_text("この不具合を直して")]
 PARENT_PLAIN = [user_text("TODO を 5 件消化して")]
+# 作業の途中で harness が注入する文（読んだ先の CLAUDE.md・通知）。本文に「不具合」「直して」等を含むが user の依頼ではない
+INJECTED = user_text("<system-reminder>\nContents of projects/<name>/CLAUDE.md:\n不具合を直して…バグ…\n</system-reminder>")
+# サブエージェントの完了報告・別セッションからの連絡（記録上は isMeta: true）と、裏の処理の完了通知
+HANDBACK = {**user_text("Another Claude session sent a message:\n<agent-message from=\"a1\">\n[Subagent hand-back] "
+                        "直せなかった不具合: hook が止めた\n</agent-message>"), "isMeta": True}
+TASK_NOTE = user_text("<task-notification>\n<summary>Agent \"P-03\" finished</summary>\n不具合を直して\n</task-notification>")
 
 # (description, parent, subagent transcript or None, agent_id, expected)
 CASES = [
@@ -72,6 +84,11 @@ CASES = [
      PARENT_BUG_NO_RED, None, None, "deny"),
     ("main: bug-fix request, RED observed -> pass",
      PARENT_BUG_NO_RED + [bash_call("t1"), bash_result("t1", True)], None, None, "pass"),
+    # 終了コードが握り潰されても、出力に残った失敗の要約・例外は RED として数える
+    ("main: exit masked by | tail, pytest summary shows failure -> pass",
+     PARENT_BUG_NO_RED + [bash_call("t2"), bash_masked("t2", "FAILED a.py::test_x\n1 failed, 15 passed in 0.96s")], None, None, "pass"),
+    ("main: exit masked, output has no failure -> deny",
+     PARENT_BUG_NO_RED + [bash_call("t3"), bash_masked("t3", "16 passed in 0.44s")], None, None, "deny"),
     ("main: not a bug-fix request -> pass",
      PARENT_PLAIN, None, None, "pass"),
     ("subagent: RED observed in own transcript, parent has none -> pass",
@@ -86,6 +103,21 @@ CASES = [
      PARENT_PLAIN, [user_text("集計の不具合を直す")], AGENT, "deny"),
     ("subagent: transcript file missing -> falls back to parent",
      PARENT_BUG_NO_RED, None, AGENT, "deny"),
+    # 注入文（<system-reminder>）は依頼として読まない（無人のストーリーで、新規スクリプトの編集を止めていた）
+    ("subagent: injected CLAUDE.md after a non-bugfix prompt -> pass",
+     PARENT_PLAIN, [user_text("ストーリー S-1 を実装する"), bash_call("s2"), bash_result("s2", False), INJECTED],
+     AGENT, "pass"),
+    ("main: injected text after a real bug-fix request -> still gated (deny)",
+     PARENT_BUG_NO_RED + [INJECTED], None, None, "deny"),
+    ("main: real bug-fix request alongside injected text in one message -> deny",
+     [user_text("<system-reminder>\nnotice\n</system-reminder>\nこの不具合を直して")], None, None, "deny"),
+    # 完了報告・連絡（isMeta）と完了通知は user の依頼ではない
+    ("main: subagent hand-back mentioning 不具合 after a plain request -> pass",
+     PARENT_PLAIN + [HANDBACK], None, None, "pass"),
+    ("main: task-notification mentioning 不具合 after a plain request -> pass",
+     PARENT_PLAIN + [TASK_NOTE], None, None, "pass"),
+    ("main: hand-back after a real bug-fix request -> still gated (deny)",
+     PARENT_BUG_NO_RED + [HANDBACK, TASK_NOTE], None, None, "deny"),
 ]
 
 

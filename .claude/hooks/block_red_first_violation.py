@@ -99,6 +99,15 @@ def _looks_like_bugfix_request(user_text: str) -> bool:
     return any(kw.lower() in lower for kw in _BUG_INDICATORS)
 
 
+_INJECTED_RE = re.compile(r"<system-reminder>.*?</system-reminder>|<task-notification>.*?</task-notification>", re.S)
+
+
+def _strip_injected(text: str) -> str:
+    """harness が作業の途中で user の発話として注入する文（読んだ先の CLAUDE.md・通知）を外す。
+    CLAUDE.md は「不具合」「直して」等を含むので、残すと依頼でない編集までバグ修正として止める"""
+    return _INJECTED_RE.sub("", text)
+
+
 def _extract_user_text(content) -> str:
     if isinstance(content, str):
         return content
@@ -114,6 +123,20 @@ def _extract_user_text(content) -> str:
 
 
 _RED_INTERPRETATIONS = ("Condition is false", "Files differ")
+# 終了コードが `| tail` 等で 0 に握り潰されても、出力に残ったテストの失敗の要約と Python の例外は RED として数える
+# （deny 理由の最頻原因が exit-mask で、RED を実際に見たのに Edit が止まり、同じテストを素で再実行する往復が毎回起きていた）。
+_RED_TEXT_RE = re.compile(
+    r"^=+ .*\b\d+ (?:failed|errors?)\b.* =+$|^\d+ failed\b|^FAILED \S+::|^Traceback \(most recent call last\):",
+    re.M)
+
+
+def _tool_result_text(c: dict) -> str:
+    v = c.get("content")
+    if isinstance(v, str):
+        return v
+    if isinstance(v, list):
+        return "\n".join(str(x.get("text") or "") for x in v if isinstance(x, dict))
+    return ""
 
 
 def _scan_turn(transcript_path: str) -> dict:
@@ -152,7 +175,9 @@ def _scan_turn(transcript_path: str) -> dict:
             continue
         if msg.get("role") != "user":
             continue
-        text = _extract_user_text(msg.get("content"))
+        if obj.get("isMeta"):   # サブエージェントの完了報告・別セッションからの連絡。user の依頼ではない
+            continue
+        text = _strip_injected(_extract_user_text(msg.get("content")))
         if text.strip():
             user_text = text
             user_idx = i
@@ -216,7 +241,8 @@ def _scan_turn(transcript_path: str) -> dict:
                     # どちらも明示の比較が偽になった＝非ゼロ終了なので RED として数える。
                     # grep の "No matches found" は検索の空振りと区別できないので数えない。
                     tur = obj.get("toolUseResult")
-                    if isinstance(tur, dict) and tur.get("returnCodeInterpretation") in _RED_INTERPRETATIONS:
+                    if (isinstance(tur, dict) and tur.get("returnCodeInterpretation") in _RED_INTERPRETATIONS) \
+                            or _RED_TEXT_RE.search(_tool_result_text(c)):
                         tu_id = c.get("tool_use_id")
                         if isinstance(tu_id, str) and tu_id:
                             error_tool_use_ids.add(tu_id)
