@@ -80,7 +80,10 @@ fi
 #     ルートから起動したセッションには projects/<name>/.claude/skills|agents が読み込まれない
 #     (実測: ルート起動の Skill 一覧に projects/<name> の skill が載らず、ファイルを読んでも遅れて読み込まれない)。
 #     projects/.claude-plugin/marketplace.json に載せたプロジェクトの .claude/ を、手元の範囲 (--scope local) の
-#     plugin として登録する。plugin は元の場所から読まれ (cache の写しは使われない)、名前は <plugin>:<名前> になる。
+#     plugin として登録する。名前は <plugin>:<名前> になる。
+#     Skill として呼んだときに読まれる本文は ~/.claude/plugins/cache/ の写しで、install しただけでは取り直されない
+#     (写しが古いまま、元の場所での Skill の直しがどのセッションにも届かなくなる)。
+#     install の後に update で写しを元の場所から取り直す (反映は次のセッション開始時)。
 #     ルートの .claude/ に symlink を張ってファイル単位で exclude する方式はやめた (層をディレクトリで分けるため)。
 mk="projects/.claude-plugin/marketplace.json"
 if [[ -f "$mk" ]] && command -v claude >/dev/null; then
@@ -92,6 +95,7 @@ if [[ -f "$mk" ]] && command -v claude >/dev/null; then
   claude plugin marketplace add "$ROOT/projects" --scope local >/dev/null 2>&1 || true
   for p in $(python3 -c 'import json,sys; print(" ".join(x["name"] for x in json.load(open(sys.argv[1]))["plugins"]))' "$mk"); do
     claude plugin install "$p@$mk_name" --scope local >/dev/null 2>&1 && echo "plugin: $p@$mk_name (local)" || echo "WARN: plugin $p@$mk_name を登録できない"
+    claude plugin update "$p@$mk_name" --scope local >/dev/null 2>&1 || echo "WARN: plugin $p@$mk_name の写しを取り直せない"
   done
   if [[ -n "$restore" ]]; then cp "$sl" .local/settings.local.json; rm "$sl"; link "$sl" ../.local/settings.local.json; fi
 fi
