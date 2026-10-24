@@ -21,6 +21,9 @@ _PROJECT_DIR = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
 _SLUG = re.sub(r"[^A-Za-z0-9]", "-", _PROJECT_DIR)
 HOOKS_DIR = os.path.join(_PROJECT_DIR, ".claude/hooks")
 TELEM = os.path.join(HOME, ".claude/projects", _SLUG, "telemetry/hook_fires.jsonl")
+# 配線の出所 (_PROJECT_DIR 相対。無いファイルは飛ばす)
+SETTINGS_FILES = (".claude/settings.json", ".local/settings.local.json")
+_WIRED_RE = re.compile(r"hooks/(?:local/)?([A-Za-z0-9_]+)\.py")
 
 # Outcome classes. Violation fires (block/warn) are the deprecation/efficacy
 # signal — a rule that catches a violation or nudges. Activity fires
@@ -52,22 +55,48 @@ def is_test_fixture(rec):
     return "test fixture" in str(extra.get("reason", "")).lower()
 
 
+def list_hook_paths(hooks_dir):
+    """hooks_dir と local/ の hook を {名前: パス} で返す。_helper と test_ は除く。"""
+    return {
+        os.path.basename(p)[:-3]: p
+        for p in sorted(
+            glob.glob(os.path.join(hooks_dir, "*.py"))
+            + glob.glob(os.path.join(hooks_dir, "local", "*.py"))
+        )
+        if not os.path.basename(p).startswith(("_", "test_"))
+    }
+
+
+def load_wired(project_dir):
+    """settings の hooks の command から配線済み hook 名の集合を返す。
+    settings が 1 つも読めなければ None (配線を判定しない)。"""
+    wired, found = set(), False
+    for rel in SETTINGS_FILES:
+        path = os.path.join(project_dir, rel)
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        found = True
+        for groups in (data.get("hooks") or {}).values():
+            for group in groups or []:
+                for h in group.get("hooks") or []:
+                    wired.update(_WIRED_RE.findall(str(h.get("command", ""))))
+    return wired if found else None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=30)
     args = ap.parse_args()
 
-    # 1. enumerate hook scripts (skip private _helpers). local/ はローカル層 hook
-    #    (gitignore 済み・ユーザー固有) — cold-hook 監査の対象には同じく含める。
-    hook_paths = {
-        os.path.basename(p)[:-3]: p
-        for p in sorted(
-            glob.glob(os.path.join(HOOKS_DIR, "*.py"))
-            + glob.glob(os.path.join(HOOKS_DIR, "local", "*.py"))
-        )
-        if not os.path.basename(p).startswith("_")
-    }
+    # 1. enumerate hook scripts (skip private _helpers and test_ files). local/ は
+    #    ローカル層 hook (gitignore 済み・ユーザー固有) — cold-hook 監査の対象には同じく含める。
+    hook_paths = list_hook_paths(HOOKS_DIR)
     hook_files = sorted(hook_paths)
+    wired = load_wired(_PROJECT_DIR)
+    unwired = [] if wired is None else [h for h in hook_files if h not in wired]
 
     # 2. which hooks even call record_fire (are instrumented)?
     instrumented = set()
@@ -122,7 +151,14 @@ def main():
 
     # COLD = instrumented but NEVER fired (any class). A hook that only ever emits
     # activity fires is alive (doing its job) and is NOT a deprecation candidate.
-    cold = sorted(instrumented - fired_any)
+    # 未配線の hook は発火しえないので COLD (退役候補) と混ぜず UNWIRED に出す。
+    cold = sorted(instrumented - fired_any - set(unwired))
+    if unwired:
+        print(f"-- UNWIRED ({len(unwired)}) — not referenced by any settings hook "
+              "(cannot fire; not judged cold):")
+        for h in unwired:
+            print(f"   · {h}")
+        print()
     if cold:
         print(f"-- COLD ({len(cold)}) — instrumented but 0 fires in {args.days}d "
               "(deprecation candidates):")
@@ -147,7 +183,7 @@ def main():
     print(f"TELEMETRY_SUMMARY hooks={len(hook_files)} "
           f"instrumented={len(instrumented)} "
           f"uninstrumented={len(not_instrumented)} "
-          f"cold={len(cold)} fires_{args.days}d={len(real_fires)} "
+          f"cold={len(cold)} unwired={len(unwired)} fires_{args.days}d={len(real_fires)} "
           f"viol_{args.days}d={len(viol_fires)} "
           f"activity_{args.days}d={len(act_fires)}")
 
