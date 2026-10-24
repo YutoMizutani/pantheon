@@ -22,10 +22,12 @@
   → 標準出力 1 行: `PROCEED count=<N>` か `SUPPRESS count=<N>`
      N = TTL 窓内に同 fingerprint が既に記録された回数 (今回分を含まない)。
      N >= threshold なら SUPPRESS (= これが (N+1) 回目の提案 → churn とみなし出さない)。
-  この呼び出しは現提案の fingerprint を必ず台帳へ追記する (記録と判定を 1 手で行う)。
+  PROCEED のときだけ現提案の fingerprint を台帳へ追記する (SUPPRESS した回は数えない —
+  数えると抑制が自分自身を延長し、窓内の回数が際限なく増える)。
 
-fingerprint = sha1( sorted(normalized source slugs) + "|" + basename(target) )。
-source_memories と target が同じなら「同じ提案」とみなす (本文の言い回し差は無視)。
+fingerprint = sha1( sorted(normalized source slugs) + "|" + basename(target) [+ "|" + 空白を除いた --change] )。
+--change (提案の diff 本文) を渡せば、source と target が同じでも中身の違う提案は別物として数える。
+渡さなければ従来どおり source と target だけで判定する。
 """
 from __future__ import annotations
 
@@ -53,9 +55,12 @@ def _norm_slug(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "_", s.strip().lower())
 
 
-def fingerprint(source: str, target: str) -> str:
+def fingerprint(source: str, target: str, change: str = "") -> str:
     slugs = sorted(_norm_slug(s) for s in source.split(",") if s.strip())
     key = ",".join(slugs) + "|" + os.path.basename(target.strip())
+    norm_change = re.sub(r"\s+", "", change)
+    if norm_change:
+        key += "|" + norm_change
     return hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
 
 
@@ -87,9 +92,9 @@ def _now():
 
 
 def check_and_record(source: str, target: str, ttl_days: int, threshold: int,
-                     now=None) -> tuple[str, int]:
+                     now=None, change: str = "") -> tuple[str, int]:
     now = now or _now()
-    fp = fingerprint(source, target)
+    fp = fingerprint(source, target, change)
     recs = _load()
     ttl_cut = now - timedelta(days=ttl_days)
     prune_cut = now - timedelta(days=_PRUNE_DAYS)
@@ -103,14 +108,17 @@ def check_and_record(source: str, target: str, ttl_days: int, threshold: int,
         if r.get("fp") == fp and ts is not None and ts >= ttl_cut:
             prior += 1
 
-    kept.append({"ts": now.isoformat().replace("+00:00", "Z"), "fp": fp,
-                 "source": source, "target": os.path.basename(target.strip())})
+    decision = "SUPPRESS" if prior >= threshold else "PROCEED"
+    # Only proposals actually shown are recorded; a suppressed call must not
+    # extend its own suppression.
+    if decision == "PROCEED":
+        kept.append({"ts": now.isoformat().replace("+00:00", "Z"), "fp": fp,
+                     "source": source, "target": os.path.basename(target.strip())})
     os.makedirs(os.path.dirname(LEDGER), exist_ok=True)
     with open(LEDGER, "w", encoding="utf-8") as f:
         for r in kept:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
-    decision = "SUPPRESS" if prior >= threshold else "PROCEED"
     return decision, prior
 
 
@@ -120,13 +128,14 @@ def main() -> int:
     c = sub.add_parser("check-and-record")
     c.add_argument("--source", required=True, help="comma-separated source memory slugs")
     c.add_argument("--target", required=True, help="proposal target_file")
+    c.add_argument("--change", default="", help="proposal diff text (whitespace-insensitive)")
     c.add_argument("--ttl-days", type=int, default=14)
     c.add_argument("--threshold", type=int, default=2)
     args = ap.parse_args()
 
     if args.cmd == "check-and-record":
         decision, prior = check_and_record(
-            args.source, args.target, args.ttl_days, args.threshold)
+            args.source, args.target, args.ttl_days, args.threshold, change=args.change)
         print(f"{decision} count={prior}")
     return 0
 

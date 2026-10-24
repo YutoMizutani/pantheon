@@ -47,7 +47,8 @@ def main() -> int:
         # (5) reordered source + hyphen alias → SAME fingerprint → still suppressed
         d_alias, n_alias = pl.check_and_record(
             "feedback-a,feedback-b", tgt, 14, 2, now=T0 + timedelta(hours=3))
-        check("alias_and_order_same_fp", d_alias == "SUPPRESS" and n_alias == 3,
+        # count stays 2: the suppressed 3rd call was not recorded
+        check("alias_and_order_same_fp", d_alias == "SUPPRESS" and n_alias == 2,
               f"{d_alias} {n_alias}")
 
         # (2) different fingerprint is independent
@@ -71,6 +72,21 @@ def main() -> int:
         # (T0+100d) - 90d = T0+10d. So T0..T0+4h pruned; T0+20d & T0+100d kept.
         check("prune_drops_old_entries", len(lines) == 2,
               f"before={before} after={len(lines)}")
+
+        # (6) same source+target but a different change text is a different proposal.
+        T1 = T0 + timedelta(days=200)
+        s6 = "feedback_own"
+        pl.check_and_record(s6, tgt, 14, 2, now=T1, change="文 A を足す")
+        pl.check_and_record(s6, tgt, 14, 2, now=T1, change="文 A を足す")
+        d6, n6 = pl.check_and_record(s6, tgt, 14, 2, now=T1, change="語 B を置き換える")
+        check("different_change_independent", d6 == "PROCEED" and n6 == 0, f"{d6} {n6}")
+        # whitespace-only differences still count as the same change
+        d6b, n6b = pl.check_and_record(s6, tgt, 14, 2, now=T1, change=" 文 A を\n足す ")
+        check("whitespace_same_change", d6b == "SUPPRESS" and n6b == 2, f"{d6b} {n6b}")
+
+        # (7) a suppressed call is not recorded, so the count stays at the threshold.
+        d7, n7 = pl.check_and_record(s6, tgt, 14, 2, now=T1, change="文 A を足す")
+        check("suppressed_not_recorded", d7 == "SUPPRESS" and n7 == 2, f"{d7} {n7}")
 
         del os.environ["FRAME_TELEMETRY_DIR"]
 
