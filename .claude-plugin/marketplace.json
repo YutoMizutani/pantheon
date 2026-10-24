@@ -9,6 +9,11 @@
       "description": "判断・計算の道具を作る前に問題の形から手法を選ばせる（同じ形の問題を道具ごとに別々の近似で書き、正しさを測れないときに）"
     },
     {
+      "name": "elime",
+      "source": "./plugins/elime",
+      "description": "5 歳児向けでなく「あなたが既に知っていること」を土台に解説する（知っていることの記録は projects と Claude とのやりとりから育つ）"
+    },
+    {
       "name": "lens-next",
       "source": "./plugins/lens-next",
       "description": "観点を軸にプロジェクトを見回し、次の一手を優先度順に出して TODO に積む"

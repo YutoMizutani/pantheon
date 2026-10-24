@@ -1,0 +1,7 @@
+{
+  "name": "elime",
+  "version": "0.1.0",
+  "description": "Explain Like I'm Me — 5 歳児でなく「あなたが既に知っていること」を土台に解説する skill。知っていることの記録は projects と Claude とのやりとりから育つ",
+  "author": { "name": "Pantheon" },
+  "keywords": ["explain", "eli5", "learning", "profile"]
+}
