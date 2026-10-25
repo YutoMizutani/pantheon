@@ -16,7 +16,14 @@
     python3 heaven/tools/precommit_privacy.py            # stage した変更を調べる（pre-commit から）
     PANTHEON_PRIVACY_CLAUDE=0 git commit ...             # 2 段目を飛ばす（claude が使えないとき）
     git commit --no-verify ...                           # 両方飛ばす（中身を自分で確かめたときだけ）
+
+外から基準を足す（別のリポジトリの hook から呼ぶとき）:
+    --policy <ファイル>        2 段目の判定に足す基準の文（繰り返し可）
+    --deny <ファイル>          1 段目に足す禁止語（1 行 1 つの正規表現・繰り返し可）
+    --projects-root <dir>     `projects/<名前>` を内部プロジェクトとみなす repo（既定は commit する repo）
+    --allow-author-name       git の user.name（作者本人）を著者表記として書くのを許す
 """
+import argparse
 import getpass
 import json
 import os
@@ -54,7 +61,7 @@ def local_projects(root: Path) -> list[str]:
                   if p.is_dir() and not p.name.startswith(".") and p.name != "example-infra")
 
 
-def patterns(root: Path) -> list[tuple[str, re.Pattern]]:
+def patterns(root: Path, opts=None) -> list[tuple[str, re.Pattern]]:
     pats: list[tuple[str, str]] = []
     home = os.path.expanduser("~")
     if home not in ("", "/"):
@@ -62,7 +69,8 @@ def patterns(root: Path) -> list[tuple[str, re.Pattern]]:
     login = getpass.getuser()
     if login:
         pats.append(("ログイン名", rf"(?<![A-Za-z0-9_]){re.escape(login)}(?![A-Za-z0-9_])"))
-    for key in ("user.name", "user.email"):
+    keys = ("user.email",) if opts and opts.allow_author_name else ("user.name", "user.email")
+    for key in keys:
         v = git("config", key, root=root).strip()
         if v:
             pats.append((f"git の {key}", re.escape(v)))
@@ -73,24 +81,29 @@ def patterns(root: Path) -> list[tuple[str, re.Pattern]]:
         ("17〜20 桁の ID", r"(?<!\d)\d{17,20}(?!\d)"),
         ("セッション ID", r"\bsid[ =:]+[0-9a-f]{6,}\b|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"),
     ]
-    names = local_projects(root)
+    names = local_projects(projects_root(root, opts))
     if names:
         pats.append(("ローカルのプロジェクト", r"\bprojects/(?:" + "|".join(map(re.escape, names)) + r")\b"))
-    deny = root / ".local" / "precommit-deny.txt"
-    if deny.is_file():
+    for deny in [root / ".local" / "precommit-deny.txt"] + [Path(d) for d in (opts.deny if opts else [])]:
+        if not deny.is_file():
+            continue
         for line in deny.read_text(encoding="utf-8").splitlines():
             if line.strip() and not line.lstrip().startswith("#"):
                 pats.append(("この環境の禁止語", line.strip()))
     return [(label, re.compile(p)) for label, p in pats]
 
 
-def stage1(root: Path, files: list[str], lines: list[tuple[str, str]]) -> list[str]:
+def projects_root(root: Path, opts=None) -> Path:
+    return Path(opts.projects_root) if opts and opts.projects_root else root
+
+
+def stage1(root: Path, files: list[str], lines: list[tuple[str, str]], opts=None) -> list[str]:
     hits = []
     for f in files:
         parts = f.split("/")
         if ".local" in parts[:-1] and f != ".local/README.md":
             hits.append(f"{f}: ignore されるはずのローカル層（.local/）のファイル")
-    pats = patterns(root)
+    pats = patterns(root, opts)
     for f, text in lines:
         for label, rx in pats:
             m = rx.search(text)
@@ -107,7 +120,7 @@ PROMPT = """あなたは公開リポジトリへの commit を止める検査役
 3. ローカル層のプロジェクトの中身: 次の名前のプロジェクトや、その中の機能・ファイル・決まりへの言及: {projects}
 当たらないもの: 仕組みの一般的な説明、`<name>` のような置き換え前の例、仕組み自体がいつ変わったかの記録（「2026-10-25 に退役」）、汎用の道具やサービスの名前、仕組みが防ぐ失敗の型を一般化して書いたもの（「知らせを読み流して書き込み禁止の場所に書いた例があった」のように、いつ・誰の・どのプロジェクトかを特定できない動機の説明）。
 2 に当たるのは、日付・セッション ID・ストーリー ID・発言の引用・プロジェクト名など、特定の人の特定の出来事に結び付く手がかりを含む行だけ。
-出力は JSON だけ: {{"findings": [{{"file": "...", "text": "当たった行の抜粋", "kind": "1|2|3", "why": "理由を短く"}}]}}。無ければ {{"findings": []}}。"""
+{extra}出力は JSON だけ: {{"findings": [{{"file": "...", "text": "当たった行の抜粋", "kind": "1|2|3", "why": "理由を短く"}}]}}。無ければ {{"findings": []}}。"""
 
 
 def chunks(lines: list[tuple[str, str]]) -> list[str]:
@@ -145,19 +158,31 @@ def judge(prompt: str, diff: str) -> list[str]:
         found = None
     if found is None:
         return [f"Claude の判定を読めない（終了コード {r.returncode}）: {(r.stdout or r.stderr).strip()[:200]}"]
-    kinds = {"1": "個人情報", "2": "個人の作業の経緯", "3": "ローカル層のプロジェクト"}
+    kinds = {"1": "個人情報", "2": "個人の作業の経緯", "3": "ローカル層のプロジェクト", "4": "追加の基準"}
     return [f"{x.get('file')}: {kinds.get(str(x.get('kind')), x.get('kind'))} — {x.get('why')} — {str(x.get('text'))[:120]}"
             for x in found]
 
 
-def stage2(root: Path, lines: list[tuple[str, str]]) -> tuple[list[str], str]:
+def extra_criteria(opts) -> str:
+    out = []
+    if opts and opts.allow_author_name:
+        out.append("このリポジトリの作者本人の名前が、著者表記・LICENSE・パッケージの authors・リポジトリの URL に出るのは 1 に当たらない。")
+    for p in (opts.policy if opts else []):
+        f = Path(p)
+        if f.is_file():
+            out.append(f.read_text(encoding="utf-8").strip())
+    return ("追加の基準（上の 1〜3 に加えて、これに当たる行も挙げる。kind は当てはまる番号か \"4\"）:\n" + "\n\n".join(out) + "\n") if out else ""
+
+
+def stage2(root: Path, lines: list[tuple[str, str]], opts=None) -> tuple[list[str], str]:
     if os.environ.get("PANTHEON_PRIVACY_CLAUDE") == "0":
         return [], "2 段目（Claude の判定）は PANTHEON_PRIVACY_CLAUDE=0 で飛ばした"
     if not lines:
         return [], ""
     if not shutil.which("claude"):
         return [], "claude が無いので 2 段目は飛ばした"
-    prompt = PROMPT.format(projects=", ".join(local_projects(root)) or "（なし）")
+    prompt = PROMPT.format(projects=", ".join(local_projects(projects_root(root, opts))) or "（なし）",
+                           extra=extra_criteria(opts))
     parts = chunks(lines)
     with ThreadPoolExecutor(max_workers=min(4, len(parts))) as ex:
         results = list(ex.map(lambda d: judge(prompt, d), parts))
@@ -166,11 +191,26 @@ def stage2(root: Path, lines: list[tuple[str, str]]) -> tuple[list[str], str]:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--policy", action="append", default=[])
+    ap.add_argument("--deny", action="append", default=[])
+    ap.add_argument("--projects-root")
+    ap.add_argument("--allow-author-name", action="store_true")
+    opts = ap.parse_args()
     root = Path(git("rev-parse", "--show-toplevel", root=Path.cwd()).strip() or ".")
-    files = git("diff", "--cached", "--name-only", "--diff-filter=ACMR", root=root).split()
-    lines = added_lines(git("diff", "--cached", "-U0", "--no-color", "--diff-filter=ACMR", root=root))
-    hits = stage1(root, files, lines)
-    ai, note = stage2(root, lines)
+    # 差分を取れなかったのに空の差分として通すと、検査をすり抜ける。git が失敗したら止める
+    diffs = []
+    for args in (("--name-only",), ("-U0", "--no-color")):
+        r = subprocess.run(["git", "diff", "--cached", "--diff-filter=ACMR", *args], cwd=root,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f"[privacy] stage した差分を読めない（git diff の終了コード {r.returncode}）: {r.stderr.strip()[:200]}",
+                  file=sys.stderr)
+            return 1
+        diffs.append(r.stdout)
+    files, lines = diffs[0].split(), added_lines(diffs[1])
+    hits = stage1(root, files, lines, opts)
+    ai, note = stage2(root, lines, opts)
     if note:
         print(f"[privacy] {note}", file=sys.stderr)
     if not hits and not ai:
