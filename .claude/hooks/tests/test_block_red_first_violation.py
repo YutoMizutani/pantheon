@@ -77,6 +77,8 @@ INJECTED = user_text("<system-reminder>\nContents of projects/<name>/CLAUDE.md:\
 HANDBACK = {**user_text("Another Claude session sent a message:\n<agent-message from=\"a1\">\n[Subagent hand-back] "
                         "直せなかった不具合: hook が止めた\n</agent-message>"), "isMeta": True}
 TASK_NOTE = user_text("<task-notification>\n<summary>Agent \"P-03\" finished</summary>\n不具合を直して\n</task-notification>")
+# 開く・閉じるタグに属性（id=）が付いた注入文。属性の無い形しか外さないと、中の「直して」を依頼と読む
+INJECTED_ATTR = user_text("<system-reminder id=\"a1b2\">\n係の報告: 動かない…直して\n</system-reminder id=\"a1b2\">")
 
 # (description, parent, subagent transcript or None, agent_id, expected)
 CASES = [
@@ -118,6 +120,8 @@ CASES = [
      PARENT_PLAIN + [TASK_NOTE], None, None, "pass"),
     ("main: hand-back after a real bug-fix request -> still gated (deny)",
      PARENT_BUG_NO_RED + [HANDBACK, TASK_NOTE], None, None, "deny"),
+    ("main: injected text with id= attributes after a plain request -> pass",
+     PARENT_PLAIN + [INJECTED_ATTR], None, None, "pass"),
 ]
 
 

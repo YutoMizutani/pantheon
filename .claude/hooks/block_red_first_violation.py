@@ -99,7 +99,8 @@ def _looks_like_bugfix_request(user_text: str) -> bool:
     return any(kw.lower() in lower for kw in _BUG_INDICATORS)
 
 
-_INJECTED_RE = re.compile(r"<system-reminder>.*?</system-reminder>|<task-notification>.*?</task-notification>", re.S)
+_INJECTED_RE = re.compile(
+    r"<system-reminder\b[^>]*>.*?</system-reminder\b[^>]*>|<task-notification\b[^>]*>.*?</task-notification\b[^>]*>", re.S)
 
 
 def _strip_injected(text: str) -> str:
