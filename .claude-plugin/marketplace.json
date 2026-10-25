@@ -22,6 +22,11 @@
       "name": "limit-resume",
       "source": "./plugins/limit-resume",
       "description": "利用上限で止まったセッションを、解除後に同じ窓で自動再開する（上限に当たったセッションだけ・解除が 12 時間より先なら捨てる）"
+    },
+    {
+      "name": "todo-loop",
+      "source": "./plugins/todo-loop",
+      "description": "TODO.md を無人セッションで 1 SP ずつ消化し、尽きたら lens-next で積み足す（時刻指定の連続実行・利用上限明けの自動再開）"
     }
   ]
 }

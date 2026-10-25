@@ -1,0 +1,7 @@
+{
+  "name": "todo-loop",
+  "version": "0.2.0",
+  "description": "プロジェクトの TODO.md を無人セッションで 1 SP ずつ消化し、尽きたら lens-next で積み足す。時刻指定の連続実行と利用上限明けの自動再開つき",
+  "author": { "name": "Pantheon" },
+  "keywords": ["todo", "runner", "automation"]
+}

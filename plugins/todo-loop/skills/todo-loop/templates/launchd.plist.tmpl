@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- todo-loop の定時実行。scripts/schedule.sh が {{...}} を埋めて <状態>/launchd/ に書き出す（登録は人が行う） -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{LABEL}}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>{{RUNNER}}</string>
+    <string>{{PROJECT}}</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>{{PROJECT}}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{{PATH}}</string>
+    <key>HOME</key>
+    <string>{{HOME}}</string>
+{{ENV}}  </dict>
+  <key>StartCalendarInterval</key>
+  <array>
+{{TIMES}}  </array>
+  <key>StandardOutPath</key>
+  <string>{{LOG}}</string>
+  <key>StandardErrorPath</key>
+  <string>{{LOG}}</string>
+</dict>
+</plist>
