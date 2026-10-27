@@ -101,30 +101,33 @@ memory は 1 つのリポジトリに 1 か所（`heaven/memory/`）なので、
 ## 中身
 
 ```
-CLAUDE.md                # メタエージェント（ルーティングと機構のみ — フレーム層）
-CLAUDE.local.md.example  # ローカル層の CLAUDE.local.md の雛形（セットアップ時にコピーされる）
-.local/README.md         # ローカル層の置き場の目印（中身は git 管理外）
-.gitignore / .ignore     # 二層の境界 / 横断検索から外す物
 .claude/
-├── settings.json        # hook 配線（$CLAUDE_PROJECT_DIR ベース）
-├── hooks/               # 自己改善ループと衛生の hook（tests/ 付き）
 ├── agents/              # 振り返り（self-reflection）・棚卸し（rule-auditor）・構造監査（root-cause-auditor）
-├── skills/ commands/ workflows/   # 同梱の skill・コマンド・workflow
-└── rules/common/        # 全プロジェクト共通ルール（ループが育てる）
-plugins/                 # 入れた物だけが効く opt-in 機能（.claude-plugin/marketplace.json から導入）
+├── commands/            # 同梱のコマンド
+├── hooks/               # 自己改善ループと衛生の hook（tests/ 付き）
+├── rules/common/        # 全プロジェクト共通ルール（ループが育てる）
+├── skills/              # 同梱の skill
+├── workflows/           # 同梱の workflow
+└── settings.json        # hook 配線（$CLAUDE_PROJECT_DIR ベース）
+.local/
+└── README.md            # ローカル層の置き場の目印（中身は git 管理外）
+docs/
+├── recipes/                   # effective-rules.md の規範の実体（配線されていない）
+├── built-in-mechanisms.md     # 組み込み機構の機能説明
+├── design-rationale.md        # 設計原理
+├── effective-rules.md         # 原環境で効いた規範のカタログ
+├── new-project-setup.md       # 新規プロジェクト作成・ルール適用条件の仕様
+├── self-improvement-loop.md   # 自己改善ループの全体像（まずこれを読む）
+└── skill-addons.md            # skill アドオンの仕組み
 heaven/                  # エージェントの持ち物
 ├── memory/              # auto-memory の実体（ローカル層）
 └── tools/               # ループの計器・セッション管理などの仕組み
-docs/
-├── self-improvement-loop.md   # 自己改善ループの全体像（まずこれを読む）
-├── design-rationale.md        # 設計原理
-├── built-in-mechanisms.md     # 組み込み機構の機能説明
-├── effective-rules.md         # 原環境で効いた規範のカタログ
-├── recipes/                   # その実体（配線されていない）
-├── skill-addons.md            # skill アドオンの仕組み
-└── new-project-setup.md       # 新規プロジェクト作成・ルール適用条件の仕様
+plugins/                 # 入れた物だけが効く opt-in 機能（.claude-plugin/marketplace.json から導入）
 projects/
 └── example-infra/             # プロジェクトの雛形（コピー元・骨格のみ）
+.gitignore / .ignore     # 二層の境界 / 横断検索から外す物
+CLAUDE.local.md.example  # ローカル層の CLAUDE.local.md の雛形（セットアップ時にコピーされる）
+CLAUDE.md                # メタエージェント（ルーティングと機構のみ — フレーム層）
 ```
 
 <details>

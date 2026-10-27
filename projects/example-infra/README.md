@@ -6,14 +6,14 @@
 
 ```
 projects/<name>/
-├── CLAUDE.md        # エージェントの人格・役割・禁止事項（※必ず書き換える）
 ├── .claude/         # Claude Code 拡張の置き場（settings.json の骨格のみ）
 ├── context/         # ドメイン知識・前提条件・用語集など
-├── tools/           # スクリプト・ツール類
 ├── logs/            # 思考過程・検討メモ（yyyyMMdd 形式のサブディレクトリに配置）
 ├── outputs/         # 最終成果物
 ├── reference/       # 再利用する根拠データ・参考文献
-└── tmp/             # 一時ファイル（削除前提）
+├── tmp/             # 一時ファイル（削除前提）
+├── tools/           # スクリプト・ツール類
+└── CLAUDE.md        # エージェントの人格・役割・禁止事項（※必ず書き換える）
 ```
 
 - 拡張（agents / commands / skills / rules / hooks）は最初から同梱しない。
