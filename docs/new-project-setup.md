@@ -8,9 +8,9 @@
 
 ```
 projects/<name>/
-├── CLAUDE.md        # エージェントの人格・役割・禁止事項などの定義
 ├── .claude/         # Claude Code 拡張の置き場（テンプレートは settings.json の骨格のみ）
 │                    #   ※ agents / commands / skills は必要になったときに自作して育てる
+├── .local/          # この環境固有の実行時状態・データ（gitignored・任意）。sqlite/pid/cache/秘匿。env 固有で移植しない
 ├── apps/            # 実アプリ本体（apps/<app-name>/ に配置。下記「apps/ 規約」参照。任意 — 持つときのみ）
 ├── context/         # 追加のドメイン知識・設定を記述するためのファイル群
 ├── tools/           # 必要に応じて利用するツール・スクリプト群
@@ -18,7 +18,7 @@ projects/<name>/
 ├── outputs/         # 最終成果物（後から参照する前提のアウトプット）
 ├── reference/       # 再利用する根拠データ・参考文献
 ├── tmp/             # 一時ファイル（削除前提）
-└── .local/          # この環境固有の実行時状態・データ（gitignored・任意）。sqlite/pid/cache/秘匿。env 固有で移植しない
+└── CLAUDE.md        # エージェントの人格・役割・禁止事項などの定義
 ```
 
 > **プロジェクトの skill / agent はルート起動のセッションに読み込まれない**（harness が読むのは起動ディレクトリの `.claude/` だけ）。サブディレクトリのファイルを読んでも、skill / agent は遅れて読み込まれない（rule は読み込まれる。2026-10-22 に v2.1.281 で実測）。ルートから呼べるようにするには、`projects/.claude-plugin/marketplace.json`（ローカル層）の `plugins` に `{"name": "<name>", "source": "./<name>/.claude"}` を足して `bash heaven/tools/relink-local.sh` を実行する — そのプロジェクトの `.claude/` が手元の範囲（`--scope local`）の plugin として登録され、skill・agent・`hooks/hooks.json` の hook が `<name>:<名前>` で使える（Skill として呼んだときに読まれる本文は `~/.claude/plugins/cache/` の写しで、install しただけでは取り直されない。プロジェクトの skill・agent・hook を直したら `bash heaven/tools/relink-local.sh` をもう一度実行して写しを取り直す。反映は次のセッション開始時）。plugin の hook はルートの全セッションで発火するので、対象かどうかを hook 自身が判定する形にする。全プロジェクトを一律には載せない（一覧が膨らむため）。ルートの `.claude/` に symlink を張ってファイル単位で exclude する方式は使わない。
