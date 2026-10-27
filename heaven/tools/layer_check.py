@@ -17,7 +17,7 @@ Observable signal
 ----
 1. .git/info/exclude に、配る層のディレクトリ（.claude/・docs/・heaven/tools/・plugins/・.claude-plugin/）の中を
    1 ファイル・1 フォルダずつ指す行がある（「**/」で始まる実行時の汎用パターンは対象外）
-2. heaven/tools・heaven/lib のコード（.py .sh .js .swift）が projects/<実在するプロジェクト名> を含む
+2. heaven/tools・heaven/lib のコード（.py .sh .js .swift）が projects/<実在するプロジェクト名> を含む（雛形の example-infra は除く）
 3. projects/<name>/ のコードと設定（.py .sh .js .ts .swift .json）が heaven/ を指す、または ../ でルートの .claude/ へ上がる
    （.md は対象外 — 説明として書くのは依存ではない）
 
@@ -56,7 +56,9 @@ def exclude_violations() -> list[str]:
 
 
 def dependency_violations() -> list[str]:
-    projects = sorted(p.name for p in (ROOT / "projects").iterdir() if p.is_dir() and not p.name.startswith(".")) if (ROOT / "projects").exists() else []
+    # example-infra は配る層の雛形でユーザーのプロジェクトではない（precommit_privacy と同じ扱い）
+    projects = sorted(p.name for p in (ROOT / "projects").iterdir()
+                      if p.is_dir() and not p.name.startswith(".") and p.name != "example-infra") if (ROOT / "projects").exists() else []
     if not projects:
         return []
     pat = re.compile(r"projects/(" + "|".join(re.escape(p) for p in projects) + r")\b")
