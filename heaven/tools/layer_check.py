@@ -5,7 +5,9 @@ Failure it prevents
 -------------------
 層をディレクトリでなくファイル単位の除外で分けると、新しく作った物が判断されないまま配る層のディレクトリに残り、
 見つかるまで気づけない（2026-10-22: poe2 専用の探索器が heaven/tools に置かれ、user の指摘まで放置）。
-また heaven/ のコードがプロジェクトのパスを指すと、依存が projects → heaven の一方向でなくなる。
+また依存はどちら向きにも張らない: heaven/ のコードがプロジェクトのパスを指すと置き場の誤りで、プロジェクトが
+heaven/ やルートの .claude/ を実行時に当てにすると、Pantheon を外したとき（projects/<name> で単体起動したとき）に
+そのプロジェクトが動かなくなる — ルーティングのラッパーがプラットフォームに変わる入口。
 
 Observable signal
 -----------------
@@ -16,6 +18,8 @@ Observable signal
 1. .git/info/exclude に、配る層のディレクトリ（.claude/・docs/・heaven/tools/・plugins/・.claude-plugin/）の中を
    1 ファイル・1 フォルダずつ指す行がある（「**/」で始まる実行時の汎用パターンは対象外）
 2. heaven/tools・heaven/lib のコード（.py .sh .js .swift）が projects/<実在するプロジェクト名> を含む
+3. projects/<name>/ のコードと設定（.py .sh .js .ts .swift .json）が heaven/ を指す、または ../ でルートの .claude/ へ上がる
+   （.md は対象外 — 説明として書くのは依存ではない）
 
 使い方
 ------
@@ -30,6 +34,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 FRAME_DIRS = (".claude/", "docs/", "heaven/tools/", "plugins/", ".claude-plugin/")
 CODE_SUFFIXES = {".py", ".sh", ".js", ".swift"}
+PROJECT_SUFFIXES = CODE_SUFFIXES | {".ts", ".json"}
+# 生成物・依存物・実行時状態は見ない（プロジェクトのコードではない）
+SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "tmp", "logs", "outputs", ".local", "dist", "build"}
+UPWARD = re.compile(r"\bheaven/|(?:\.\./)+\.claude\b")
 
 
 def exclude_violations() -> list[str]:
@@ -70,8 +78,36 @@ def dependency_violations() -> list[str]:
     return out
 
 
+def project_dependency_violations() -> list[str]:
+    root = ROOT / "projects"
+    if not root.exists():
+        return []
+    out = []
+    for proj in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        stack = [proj]
+        while stack:
+            d = stack.pop()
+            for f in sorted(d.iterdir()):
+                if f.is_symlink():
+                    continue
+                if f.is_dir():
+                    if f.name not in SKIP_DIRS:
+                        stack.append(f)
+                    continue
+                if f.suffix not in PROJECT_SUFFIXES or f.stat().st_size > 1_000_000:
+                    continue
+                for i, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                    if line.lstrip().startswith(("#", "//")):
+                        continue
+                    m = UPWARD.search(line)
+                    if m:
+                        out.append(f"{f.relative_to(ROOT)}:{i}: {m.group(0)} — プロジェクトが Pantheon 側を当てにしている"
+                                   "（単体起動で動かなくなる。部品はプロジェクトに複製するか plugin として配る）")
+    return out
+
+
 def main() -> int:
-    v = exclude_violations() + dependency_violations()
+    v = exclude_violations() + dependency_violations() + project_dependency_violations()
     for line in v:
         print(line)
     print(f"layer_check: 違反 {len(v)} 件")
