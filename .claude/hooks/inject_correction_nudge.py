@@ -30,6 +30,12 @@ turn of the current session, and a false positive costs one stray reminder line.
 Vocabulary is user calibration from local/signals.json via _signals.py; topic
 words (自己改善 / 次から / ...) are deliberately NOT triggers (the self-feed root).
 
+Queued (mid-turn) messages: a message the user sends while Claude is working is
+delivered as a ``queued_command`` attachment in the transcript and never passes
+UserPromptSubmit, so on PreToolUse this hook reads those attachments and nudges
+once per message (seen in practice: a mid-turn 「違う」 got no nudge and
+Claude kept investigating on the same misreading).
+
 Guards: correction signal present; not entirely third-party-negation; previous
 turn was assistant (something to correct); per-session debounce; skip
 system/automated prompts. Fail-open: any error → exit 0 (never block the turn).
@@ -75,6 +81,7 @@ _NUDGE = """<system-reminder>
 [correction-signal] 直前のあなた(Claude)の応答への push-back の可能性があります。応答の前に、まず何への指摘かを分類してください:
 (a) **事実の訂正** — ユーザーが決定的な観測/測定（実機観測・一次ソースの値）を握っている場合。→ それを検証し、ユーザー観測を上位として自説を改める。
 (b) **設計/判断の対案** — 「どちらの案が良いか」等、どちらも決定的測定を握っていない場合。→ 迎合して自動的にユーザー案を採らない・自案にも固執しない。両案の判定基準を 1–2 行で書き出し、自案とユーザー案を各基準で中立に採点してから結論を出す。
+(c) **依頼の読み違い** — 「違う」「そういう意味じゃない」のように、事実や案ではなく自分の読み（指す物・語の意味）が否定された場合。→ 依頼の要の語（名詞・述語）を自分がどの意味で読んだかを 1 行で書き、一般の意味と user のふだんの意味に置き換えて、依頼とその後の user の発言に当て直す。確認を出すなら、候補に別の意味を必ず 1 つ入れる（同じ意味の中だけで並べない）。
 そのうえで誤りが見つかればその場で修正してください。**reflection の spawn・memory 書き込みはしないこと** — durable な学習は user の明示 acceptance（「完了」「ok」等）を待ちます。push-back でなければ（第三者の状態説明等）この行を無視して通常どおり応答してください。
 </system-reminder>"""
 
@@ -180,8 +187,71 @@ def _check_and_set_debounce(sid: str) -> bool:
     return True
 
 
+_QUEUED_TAIL_LINES = 400
+
+
+def _queued_human_messages(transcript_path: str) -> list[tuple[str, str]]:
+    """(delivery_id, text) of human queued_command attachments in the transcript tail."""
+    try:
+        lines = tail_lines(transcript_path, _QUEUED_TAIL_LINES)
+    except (OSError, TypeError):
+        return []
+    out: list[tuple[str, str]] = []
+    for line in lines:
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        att = obj.get("attachment") if isinstance(obj, dict) else None
+        if not isinstance(att, dict) or att.get("type") != "queued_command":
+            continue
+        if (att.get("origin") or {}).get("kind") != "human":
+            continue
+        p = att.get("prompt")
+        if isinstance(p, list):
+            text = " ".join(x.get("text", "") for x in p if isinstance(x, dict))
+        else:
+            text = p if isinstance(p, str) else ""
+        did = att.get("delivery_id") or att.get("source_uuid") or text
+        if text.strip():
+            out.append((str(did), text.strip()))
+    return out
+
+
+def _seen_file(sid: str) -> Path:
+    safe = "".join(c for c in (sid or "") if c.isalnum() or c in "-_") or "nosession"
+    return _DEBOUNCE_DIR / f"{_DEBOUNCE_PREFIX}{safe}.queued.json"
+
+
+def _pretool_main(data: dict) -> int:
+    sid = data.get("session_id") or ""
+    f = _seen_file(sid)
+    try:
+        seen = set(json.loads(f.read_text()))
+    except (OSError, ValueError, TypeError):
+        seen = set()
+    hits = [(d, t) for d, t in _queued_human_messages(data.get("transcript_path") or "")
+            if d not in seen and not t.startswith(_SYSTEM_USER_PREFIXES) and _has_correction(t)]
+    if not hits:
+        return 0
+    seen.update(d for d, _ in hits)
+    try:
+        f.write_text(json.dumps(sorted(seen)[-200:]))
+    except OSError:
+        pass
+    quoted = " / ".join(f"「{t[:80]}」" for _, t in hits)
+    ctx = _NUDGE.replace("直前のあなた(Claude)の応答への push-back",
+                         f"作業中に届いた user の発言 {quoted} は、直前のあなた(Claude)の応答・作業への push-back")
+    sys.stdout.write(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse", "additionalContext": ctx}}, ensure_ascii=False))
+    record_fire("inject_correction_nudge", "audit", context="queued nudge emitted")
+    return 0
+
+
 def main() -> int:
     data = _read_payload()
+    if data.get("hook_event_name") == "PreToolUse":
+        return _pretool_main(data)
     prompt = data.get("prompt") or ""
     transcript = data.get("transcript_path") or ""
     sid = data.get("session_id") or ""

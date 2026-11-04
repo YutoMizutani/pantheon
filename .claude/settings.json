@@ -45,6 +45,16 @@
             "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/inject_rule_on_tool.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\""
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/inject_correction_nudge.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
