@@ -1,0 +1,108 @@
+[
+ {
+  "rule": "git-workflow.md",
+  "tools": [
+   "Bash"
+  ],
+  "match": {
+   "command": "(?:^|[\\n;&|(]|\\b(?:then|do|sudo)\\s)\\s*git\\s+(?:-C\\s+\\S+\\s+)?(?:commit|push|init|branch|switch|checkout\\s+-b|rebase|reset|filter-repo)\\b"
+  },
+  "mode": "block"
+ },
+ {
+  "rule": "workflow-io-contract.md",
+  "tools": [
+   "Workflow"
+  ],
+  "mode": "block"
+ },
+ {
+  "rule": "workflow-io-contract.md",
+  "tools": [
+   "Write",
+   "Edit"
+  ],
+  "match": {
+   "file_path": "/\\.claude/workflows/[^/]+\\.js$"
+  },
+  "mode": "block"
+ },
+ {
+  "rule": "scheduled-job-fallbacks.md",
+  "tools": [
+   "CronCreate",
+   "ScheduleWakeup"
+  ],
+  "mode": "block"
+ },
+ {
+  "rule": "scheduled-job-fallbacks.md",
+  "tools": [
+   "Write",
+   "Edit"
+  ],
+  "match": {
+   "file_path": "\\.plist$"
+  },
+  "mode": "block"
+ },
+ {
+  "rule": "scheduled-job-fallbacks.md",
+  "tools": [
+   "Bash"
+  ],
+  "match": {
+   "command": "(?:^|[\\n;&|(])\\s*(?:launchctl\\s+(?:load|bootstrap|kickstart)|crontab\\s)"
+  },
+  "mode": "block"
+ },
+ {
+  "rule": "skill-revision.md",
+  "tools": [
+   "Skill"
+  ],
+  "mode": "context"
+ },
+ {
+  "rule": "skill-revision.md",
+  "tools": [
+   "Write",
+   "Edit"
+  ],
+  "match": {
+   "file_path": "/\\.claude/(skills|agents)/"
+  },
+  "mode": "context"
+ },
+ {
+  "rule": "video-game-state-extraction.md",
+  "tools": [
+   "Bash"
+  ],
+  "match": {
+   "command": "\\b(ffmpeg|ffprobe|yt-dlp|video_states\\.py)\\b"
+  },
+  "mode": "context"
+ },
+ {
+  "rule": "video-game-state-extraction.md",
+  "tools": [
+   "Read"
+  ],
+  "match": {
+   "file_path": "\\.(mp4|mov|mkv|webm|avi)$"
+  },
+  "mode": "context"
+ },
+ {
+  "rule": "decision-tool-selection.md",
+  "tools": [
+   "Write",
+   "Edit"
+  ],
+  "match": {
+   "file_path": "/tools/.*\\.(py|js|ts|html|lua)$"
+  },
+  "mode": "context"
+ }
+]

@@ -11,8 +11,8 @@
 
 - **プラグイン**: `claude plugin marketplace add <この repo>` → `claude plugin install decision-tools@pantheon`。
   道具を作る場面でスキル `decision-tools:decision-tool-selection` が使われる。一覧が無ければ、スキルがこの雛形から作るかを尋ねる。
-- **常時ルール（Pantheon の clone 内）**: `.claude/rules/common/decision-tool-selection.md` は配線済みで、
-  `.local/decision-catalog.md` がある環境でだけ効く（`.local/hooks/signals.json` と同じ形）。
+- **ルール（Pantheon の clone 内）**: `.claude/rules-ondemand/decision-tool-selection.md` は配線済み（`tools/` の下の道具を書く・直す瞬間に
+  `inject_rule_on_tool.py` が渡す）で、`.local/decision-catalog.md` がある環境でだけ効く（`.local/hooks/signals.json` と同じ形）。
   下の「一覧の雛形」を `.local/decision-catalog.md` にコピーし、使う行を一次ソース付きで埋めると有効になる。
   止めるときはそのファイルを消す。`.local/` ごと移植すれば一覧も一緒に移る。
 

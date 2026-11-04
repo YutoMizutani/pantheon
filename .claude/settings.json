@@ -36,6 +36,15 @@
             "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/touch_memory_on_read.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\""
           }
         ]
+      },
+      {
+        "matcher": "Bash|Read|Write|Edit|Workflow|Agent|Skill|CronCreate|ScheduleWakeup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/inject_rule_on_tool.py\"; [ -f \"$f\" ] || exit 0; python3 \"$f\""
+          }
+        ]
       }
     ],
     "PostToolUse": [

@@ -15,7 +15,8 @@
               → 誤りを生んだ規則・道具・手順を書き換える (書き換える先が無いときだけ memory / hook を足す)
               → memory が *手順* 型なら skill (.claude/commands) を起案 (正極性弁・PROPOSAL)
               → 既存 Skill を使った作業の fault は、その Skill の本文・道具・検査・係の定義を直す (skill-edit・PROPOSAL)
-              → hook 登録・上位層昇格・skill は直接編集せず PROPOSAL ブロックで親へ返す (in-session で user 承認後に親が適用・永続キュー不使用)
+              → hook 登録・上位層昇格・新しい skill の新設は直接編集せず PROPOSAL ブロックで親へ返す (in-session で user 承認後に親が適用・永続キュー不使用)
+              → 既存 Skill の改訂 (skill-edit)・道具・プロジェクトのファイルは承認不要 — 親がそのターンで適用して報告する (.claude/rules-ondemand/skill-revision.md)。提案ごとの承認の要否は PROPOSAL の approval 欄に書く
   ▼
 規範が 3 層に定着
   │   CLAUDE.md (毎ターンの prior) / memory (長期記憶) / hook (決定論的 enforce)
@@ -163,7 +164,7 @@ env `FRAME_SIGNALS_FILE` で読み込み先を差し替えられる（テスト�
 
 ## Skill の改訂
 
-Skill を使った作業で起きた誤り（検査の NG・レビュー役の指摘・user の差し戻し・やり直しの周回）は、user の訂正や acceptance を待たず、その作業を閉じる前に親が処理する。規則は `.claude/rules/common/skill-revision.md`（常時読み込み・作業の完了報告の瞬間に効く）。振り返りの係が後から見つけたものは `kind=skill-edit` の PROPOSAL で返る。
+Skill を使った作業で起きた誤り（検査の NG・レビュー役の指摘・user の差し戻し・やり直しの周回）は、user の訂正や acceptance を待たず、その作業を閉じる前に親が処理する。規則は `.claude/rules-ondemand/skill-revision.md`（Skill を起動した瞬間・Skill や係の定義を書き換える瞬間に `inject_rule_on_tool.py` が渡し、作業の完了報告の瞬間に効く）。振り返りの係が後から見つけたものは `kind=skill-edit` の PROPOSAL で返る。
 
 - **手段は誤りの起き方から選ぶ**: 検査を前に出す／出す側の道具を直す／検査で止める（自動で直す機能も）／手順の組み方を変える／誤りを出した係がその瞬間に読む文を書き換える／古い・食い違う指示を消す・まとめる、を全部比べ、効く中で最も上流のものを選ぶ。言われた手段・前回の手段をそのまま採らない。
 - **足さずに直す**: 同じ趣旨の行を書き換える。経緯の段落・日付・別ファイルの一覧として積まない。経緯はプロジェクトの経緯ファイルへ。
