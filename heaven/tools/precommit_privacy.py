@@ -170,7 +170,8 @@ def extra_criteria(opts) -> str:
     for p in (opts.policy if opts else []):
         f = Path(p)
         if f.is_file():
-            out.append(f.read_text(encoding="utf-8").strip())
+            # 基準は呼ぶ側の shell が作ることがあり、C ロケールのバイト数の切り詰めで多バイト文字が欠ける。欠けで検査ごと落とさない
+            out.append(f.read_text(encoding="utf-8", errors="replace").strip())
     return ("追加の基準（上の 1〜3 に加えて、これに当たる行も挙げる。kind は当てはまる番号か \"4\"）:\n" + "\n\n".join(out) + "\n") if out else ""
 
 

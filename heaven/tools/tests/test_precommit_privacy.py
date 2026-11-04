@@ -54,6 +54,16 @@ def main() -> int:
     local_file = pp.stage1(root, ["heaven/tools/w/.local/x.sh", ".local/README.md"], [])
     if len(local_file) != 1 or ".local/README.md" in local_file[0]:
         bad.append(f".local の判定: {local_file}")
+    # 基準ファイルの末尾で多バイト文字が切れていても（C ロケールの shell がバイト数で切ると起きる）、検査ごと落ちない
+    broken = root / "policy-broken.md"
+    broken.write_bytes("名簿の行: 架空の".encode("utf-8") + "研".encode("utf-8")[:1])
+    opts = type("O", (), {"allow_author_name": False, "policy": [str(broken)]})()
+    try:
+        crit = pp.extra_criteria(opts)
+        if "名簿の行: 架空の" not in crit:
+            bad.append(f"壊れた基準ファイルの読める部分が残らない: {crit!r}")
+    except UnicodeDecodeError as e:
+        bad.append(f"壊れた基準ファイルで落ちる: {e}")
     for b in bad:
         print("FAIL:", b)
     print("ok" if not bad else f"{len(bad)} failed")
