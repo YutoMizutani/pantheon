@@ -1,6 +1,6 @@
 ---
 name: rule-auditor
-description: テレメトリ消費者。hook 発火ログ + memory staleness + 自己改善 promotion queue の滞留を監査し、cold rule (deprecation 候補)・未計装 hook・未消化 promotion 提案を列挙して提案する。週次 or 「ルール整理して」「hook の棚卸し」で起動。判断のみ行い、削除や hook 改変や queue の apply/drop は user 承認後に別途。
+description: テレメトリ消費者。hook 発火ログ + memory staleness + 自己改善 promotion queue の滞留を監査し、cold rule (deprecation 候補)・未計装 hook・未消化 promotion 提案を列挙して提案する。「hook の発火を数えて」「cold rule を出して」で起動する量的な監査。週次の規範の棚卸し（消す・置き換えるの審理）は Skill norm-review が行う。判断のみ行い、削除や hook 改変や queue の apply/drop は user 承認後に別途。
 tools: ["Read", "Grep", "Glob", "Bash"]
 model: sonnet
 ---

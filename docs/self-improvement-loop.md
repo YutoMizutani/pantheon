@@ -25,6 +25,9 @@
 memory の参照も記録 ── touch_memory_on_read.py → telemetry/memory_touches.jsonl
   ▼
 棚卸し (週次 or 任意)
+      .claude/skills/norm-review/             — 週 1 区画を審理。検察 (root-cause-auditor) と弁護 (norm-defender) の論を
+                                                親が裁定し、消す・置き換える・まとめる・下ろすを証拠つきで判定する。
+                                                消すにも観測が要り (発火 0 だけでは保留)、人の活動が無い週は回らない
       heaven/tools/telemetry_report.py        — 0 発火の cold hook を列挙
       heaven/tools/rule_adoption_report.py    — 再発率 (enforce 後に再発した規範) を算出
       heaven/tools/memory_adoption_report.py  — 読まれていない memory を列挙
@@ -32,7 +35,7 @@ memory の参照も記録 ── touch_memory_on_read.py → telemetry/memory_to
       heaven/tools/skill_gc.py                — 使われない skill の可逆 archive
       .claude/agents/rule-auditor.md          — 上記を統合し deprecation 候補を提案
   ▼
-退役・統合 ── 効かない規範を削り、再発する規範は hook へ昇格
+退役・統合 ── 効かない規範を削り、再発する規範は誤りを出した既存の規則・道具を直す
 ```
 
 > **2026-06-17 — correction intake の二層化（global queue 退役 → stateless nudge へ置換）**
