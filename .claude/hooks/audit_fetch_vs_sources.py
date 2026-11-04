@@ -10,7 +10,8 @@
 
 設計:
   * Stop event hook. payload の transcript を読み、(a) セッション全体で WebFetch /
-    Bash(curl/wget) が実取得した URL 集合 と、(b) current turn (最新 user msg 以降) の
+    Bash(curl/wget) が実取得した URL 集合 (親と subagent / workflow の transcript。
+    x.com の別名ホスト fxtwitter / nitter 等は x.com に畳んで比べる) と、(b) current turn (最新 user msg 以降) の
     assistant text の「Sources 節」に記名された URL を突合する。
   * 記名されたが実取得されていない URL があれば audit log + stderr warn。
   * **WebSearch しただけの URL は fetched に含めない** (= search サマリ依存も検出対象)。
@@ -70,12 +71,18 @@ def _read_payload() -> dict:
         return {}
 
 
+# x.com の取得経路 (fxtwitter / nitter 等) は同じ投稿の別名ホスト. 比較前に x.com へ畳む.
+_X_ALIAS_HOST = re.compile(
+    r"^(?:(?:api\.)?fxtwitter\.com|fixupx\.com|vxtwitter\.com|(?:mobile\.)?twitter\.com|nitter\.[^/]+)(?=/|$)"
+)
+
+
 def _norm_url(u: str) -> str:
-    """scheme / www / 末尾記号を落として比較用に正規化."""
+    """scheme / www / 末尾記号を落とし、x.com の別名ホストを畳んで比較用に正規化."""
     u = u.strip().rstrip("/.,)>]」』。、")
     u = re.sub(r"^https?://", "", u, flags=re.IGNORECASE)
     u = re.sub(r"^www\.", "", u, flags=re.IGNORECASE)
-    return u.lower()
+    return _X_ALIAS_HOST.sub("x.com", u.lower())
 
 
 def _iter_records(transcript_path: str):
@@ -97,15 +104,58 @@ def _iter_records(transcript_path: str):
         return
 
 
-def _collect(transcript_path: str) -> tuple[set, str]:
+def _add_fetched(c: dict, fetched: set) -> None:
+    """tool_use 1 件が実取得なら、その URL を fetched に足す."""
+    name = c.get("name") or ""
+    inp = c.get("input") or {}
+    if not isinstance(inp, dict):
+        return
+    if name == "WebFetch":
+        url = inp.get("url")
+        if isinstance(url, str) and url:
+            fetched.add(_norm_url(url))
+    elif name == "Bash":
+        cmd = inp.get("command") or ""
+        if isinstance(cmd, str) and _CURL_RE.search(cmd):
+            for m in _URL_RE.finditer(cmd):
+                fetched.add(_norm_url(m.group(0)))
+
+
+def _subagent_transcripts(transcript_path: str, session_id: str) -> list:
+    """subagent / workflow の transcript (<親フォルダ>/<session_id>/**/*.jsonl)."""
+    p = Path(transcript_path)
+    sid = session_id or p.stem
+    d = p.parent / sid
+    if not sid or not d.is_dir():
+        return []
+    try:
+        return sorted(d.rglob("*.jsonl"))
+    except OSError:
+        return []
+
+
+def _collect(transcript_path: str, session_id: str = "") -> tuple[set, str]:
     """(セッション全体で実取得した URL 集合, current turn の assistant text) を返す.
 
     実取得 = WebFetch(url) または Bash の curl/wget コマンド引数の URL.
+    親に加えて subagent / workflow の transcript の取得も数える (委譲した
+    web-research の取得は出典にしてよい — CLAUDE.local.md「出典記名の境界」).
     WebSearch (query のみ / 結果 URL は fetch でない) は **含めない**.
-    current turn = 最新 user message 以降の assistant text 連結.
+    current turn = 最新 user message 以降の assistant text 連結 (親の transcript だけから取る).
     """
     fetched: set = set()
     turn_parts: list = []
+
+    for sub in _subagent_transcripts(transcript_path, session_id):
+        for obj in _iter_records(str(sub)):
+            msg = obj.get("message")
+            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+                continue
+            content = msg.get("content")
+            if isinstance(content, list):
+                for c in content:
+                    if isinstance(c, dict) and c.get("type") == "tool_use":
+                        _add_fetched(c, fetched)
 
     for obj in _iter_records(transcript_path):
         msg = obj.get("message")
@@ -137,19 +187,7 @@ def _collect(transcript_path: str) -> tuple[set, str]:
                 if ctype == "text":
                     turn_parts.append(str(c.get("text", "")))
                 elif ctype == "tool_use":
-                    name = c.get("name") or ""
-                    inp = c.get("input") or {}
-                    if not isinstance(inp, dict):
-                        continue
-                    if name == "WebFetch":
-                        url = inp.get("url")
-                        if isinstance(url, str) and url:
-                            fetched.add(_norm_url(url))
-                    elif name == "Bash":
-                        cmd = inp.get("command") or ""
-                        if isinstance(cmd, str) and _CURL_RE.search(cmd):
-                            for m in _URL_RE.finditer(cmd):
-                                fetched.add(_norm_url(m.group(0)))
+                    _add_fetched(c, fetched)
 
     return fetched, "\n".join(turn_parts).strip()
 
@@ -209,7 +247,7 @@ def main() -> int:
     if not transcript:
         return 0
 
-    fetched, text = _collect(transcript)
+    fetched, text = _collect(transcript, sid)
     src_urls = _source_urls(text)
     if not src_urls:
         return 0
