@@ -41,6 +41,7 @@ def record_fire(
     count: int = 1,
     context: str | None = None,
     extra: dict | None = None,
+    session_id: str | None = None,
 ) -> None:
     """Append one fire record to the telemetry JSONL.
 
@@ -63,6 +64,11 @@ def record_fire(
                 Reserved for metadata the reporter keys on — notably
                 ``extra={"reason": "test fixture"}`` so synthetic verification
                 fires are excluded by telemetry_report.is_test_fixture().
+    session_id: optional; the hook payload's ``session_id``. When omitted,
+                falls back to env ``CLAUDE_SESSION_ID`` → ``CLAUDE_CODE_SESSION_ID``
+                (the harness sets the latter) so callers need not read the
+                payload. If none is available the field is left out, keeping
+                rows identical to the pre-session_id format.
     """
     try:
         if hook_name is None:
@@ -78,6 +84,10 @@ def record_fire(
             record["context"] = context[:200]
         if extra:
             record["extra"] = extra
+        sid = (session_id or os.environ.get("CLAUDE_SESSION_ID")
+               or os.environ.get("CLAUDE_CODE_SESSION_ID"))
+        if sid:
+            record["session_id"] = sid
         _TELEMETRY_DIR.mkdir(parents=True, exist_ok=True)
         with open(_FIRES_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")

@@ -165,7 +165,7 @@ def main() -> None:
     )
     record_fire(
         "feedback_no_unquoted_equals_word_under_zsh", "block",
-        context=offenders[0],
+        context=offenders[0], session_id=data.get("session_id"),
     )
     sys.exit(2)
 
