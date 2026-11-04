@@ -18,6 +18,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import iter_lines  # noqa: E402
+
 sys.path.insert(0, str(Path(__file__).parent))
 try:
     from _fire_counter import record_fire  # noqa: E402
@@ -31,7 +34,7 @@ PCT_NON_ASCII = re.compile(r"%[89A-Fa-f][0-9A-Fa-f]")
 
 def final_texts(transcript: Path) -> list[str]:
     texts: list[str] = []
-    for line in transcript.read_text(encoding="utf-8", errors="ignore").splitlines():
+    for line in iter_lines(transcript):
         try:
             d = json.loads(line)
         except Exception:

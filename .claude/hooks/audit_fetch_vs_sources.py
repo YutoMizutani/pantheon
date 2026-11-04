@@ -30,6 +30,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import iter_lines  # noqa: E402
+
 # 同ディレクトリの _fire_counter を import 可能にする (telemetry 記録)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
@@ -80,7 +83,7 @@ def _iter_records(transcript_path: str):
     if not p.exists():
         return
     try:
-        for line in p.read_text(encoding="utf-8").splitlines():
+        for line in iter_lines(p):
             line = line.strip()
             if not line:
                 continue

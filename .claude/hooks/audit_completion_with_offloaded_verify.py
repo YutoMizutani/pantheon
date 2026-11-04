@@ -38,6 +38,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import iter_lines  # noqa: E402
+
 # (1) Completion / GREEN tokens.
 _COMPLETION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"完了・検証済み"),
@@ -89,7 +92,7 @@ def _scan_current_turn_assistant_text(transcript_path: str) -> str | None:
         return None
     turn_parts: list[str] = []
     try:
-        for line in p.read_text(encoding="utf-8").splitlines():
+        for line in iter_lines(p):
             line = line.strip()
             if not line:
                 continue

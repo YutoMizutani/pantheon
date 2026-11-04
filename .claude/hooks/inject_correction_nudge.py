@@ -41,6 +41,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import iter_lines, tail_lines  # noqa: E402
+
 sys.path.insert(0, str(Path(__file__).parent))
 try:
     from _signals import correction_pattern_sets  # noqa: E402
@@ -121,7 +124,7 @@ def _previous_turn_was_assistant(transcript_path: str) -> bool:
         return False
     last_role: str | None = None
     try:
-        for line in p.read_text(encoding="utf-8").splitlines():
+        for line in iter_lines(p):
             line = line.strip()
             if not line:
                 continue

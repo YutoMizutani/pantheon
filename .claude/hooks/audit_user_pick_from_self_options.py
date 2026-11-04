@@ -45,6 +45,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import iter_lines  # noqa: E402
+
 # Pattern set: "you pick from these options" framings.
 # All patterns assume the assistant already enumerated something earlier in
 # the same turn. The enumeration check happens in main() before logging.
@@ -101,7 +104,7 @@ def _scan_current_turn_assistant_text(transcript_path: str) -> str | None:
         return None
     turn_parts: list[str] = []
     try:
-        for line in p.read_text(encoding="utf-8").splitlines():
+        for line in iter_lines(p):
             line = line.strip()
             if not line:
                 continue

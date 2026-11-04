@@ -21,6 +21,9 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import tail_lines  # noqa: E402
+
 sys.path.insert(0, str(Path(__file__).parent))
 import detect_acceptance_signal as das  # noqa: E402
 
@@ -36,7 +39,7 @@ def _state_file(sid: str) -> Path:
 def queued_acceptances(transcript: Path) -> list[tuple[str, str]]:
     """未処理かどうかに関係なく、末尾 TAIL_LINES 行にある human queued_command の (source_uuid, text) のうち acceptance 語のもの。"""
     try:
-        lines = transcript.read_text(encoding="utf-8", errors="replace").splitlines()[-TAIL_LINES:]
+        lines = tail_lines(transcript, TAIL_LINES)
     except Exception:
         return []
     out = []

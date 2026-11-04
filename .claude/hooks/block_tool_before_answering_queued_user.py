@@ -33,6 +33,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import tail_lines  # noqa: E402
+
 sys.path.insert(0, str(Path(__file__).parent))
 try:
     from _fire_counter import record_fire  # noqa: E402
@@ -72,7 +75,7 @@ def _queued_text(att: dict) -> str:
 
 def unanswered_queued(transcript: Path) -> list[str]:
     try:
-        lines = transcript.read_text(encoding="utf-8", errors="replace").splitlines()[-TAIL_LINES:]
+        lines = tail_lines(transcript, TAIL_LINES)
     except Exception:
         return []
     pending: list[str] = []
@@ -207,7 +210,7 @@ def _responses_since_queued(transcript: Path) -> tuple[int, int]:
     （2026-10-21 sid 41861b00: 答えを thinking に書いたまま 3 回止められ、記録を見ずに「hook の不具合」と user に報告した。
     止める文に実数を出し、自分の側の欠落だと分かるようにした）"""
     try:
-        lines = transcript.read_text(encoding="utf-8", errors="replace").splitlines()[-TAIL_LINES:]
+        lines = tail_lines(transcript, TAIL_LINES)
     except Exception:
         return 0, 0
     n_resp = n_think = 0

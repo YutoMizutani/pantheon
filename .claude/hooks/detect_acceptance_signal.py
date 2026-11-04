@@ -56,9 +56,13 @@ from __future__ import annotations
 
 import json
 import os.path
+from itertools import islice
 import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import iter_lines  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
@@ -245,10 +249,6 @@ def _gate_features(transcript_path: str) -> dict | None:
     p = Path(transcript_path)
     if not p.exists():
         return None
-    try:
-        lines = p.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
     # Window start = just after the last line that marks a prior reflection
     # fire — either the auto-injected AUTO-LEARN-META reminder OR a manual
     # self-reflection sub-agent spawn (see _line_is_prior_reflection_fire).
@@ -258,13 +258,16 @@ def _gate_features(transcript_path: str) -> dict | None:
     # only ever makes us MORE likely to skip work we already reflected on — the
     # safe direction.)
     start = 0
-    for i, line in enumerate(lines):
-        if _line_is_prior_reflection_fire(line):
-            start = i + 1
+    try:
+        for i, line in enumerate(iter_lines(p)):
+            if _line_is_prior_reflection_fire(line):
+                start = i + 1
+    except OSError:
+        return None
     tool_use = 0
     asst_turns = 0
     real_user = 0
-    for line in lines[start:]:
+    for line in islice(iter_lines(p), start, None):
         s = line.strip()
         if not s:
             continue
@@ -456,7 +459,7 @@ def _previous_turn_was_assistant(transcript_path: str) -> bool:
         return False
     last_role: str | None = None
     try:
-        for line in p.read_text(encoding="utf-8").splitlines():
+        for line in iter_lines(p):
             line = line.strip()
             if not line:
                 continue

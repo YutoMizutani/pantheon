@@ -13,7 +13,11 @@ import json
 import re
 import sys
 from datetime import datetime, timezone
+from itertools import islice
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import iter_lines  # noqa: E402
 
 _CODE_EXTS: frozenset[str] = frozenset({
     ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
@@ -154,35 +158,32 @@ def _scan_turn(transcript_path: str) -> dict:
     if not p.exists():
         return default
 
-    try:
-        lines = p.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return default
-
     user_text = ""
     user_idx = -1
-    for i in range(len(lines) - 1, -1, -1):
-        line = lines[i].strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-        msg = obj.get("message")
-        if not isinstance(msg, dict):
-            continue
-        if msg.get("role") != "user":
-            continue
-        if obj.get("isMeta"):   # サブエージェントの完了報告・別セッションからの連絡。user の依頼ではない
-            continue
-        text = _strip_injected(_extract_user_text(msg.get("content")))
-        if text.strip():
-            user_text = text
-            user_idx = i
-            break
+    try:
+        for i, raw in enumerate(iter_lines(p)):
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            msg = obj.get("message")
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("role") != "user":
+                continue
+            if obj.get("isMeta"):   # サブエージェントの完了報告・別セッションからの連絡。user の依頼ではない
+                continue
+            text = _strip_injected(_extract_user_text(msg.get("content")))
+            if text.strip():  # 最後に当たったものが残る
+                user_text = text
+                user_idx = i
+    except OSError:
+        return default
 
     bash_tool_use_ids: set[str] = set()
     error_tool_use_ids: set[str] = set()
@@ -190,8 +191,8 @@ def _scan_turn(transcript_path: str) -> dict:
     playwright_state_mutation = False
 
     start = user_idx + 1 if user_idx >= 0 else 0
-    for i in range(start, len(lines)):
-        line = lines[i].strip()
+    for raw in islice(iter_lines(p), start, None):
+        line = raw.strip()
         if not line:
             continue
         try:

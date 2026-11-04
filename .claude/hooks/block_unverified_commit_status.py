@@ -46,6 +46,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import iter_lines  # noqa: E402
+
 sys.path.insert(0, str(Path(__file__).parent))
 from _paths import RUNTIME_DIR  # noqa: E402  env-derived runtime dir (no hardcoded user path)
 try:
@@ -161,7 +164,7 @@ def _scan_turn(transcript_path: str) -> tuple[str | None, bool, str]:
     git_check_ran = False
     last_user_text = ""
     try:
-        for line in p.read_text(encoding="utf-8").splitlines():
+        for line in iter_lines(p):
             line = line.strip()
             if not line:
                 continue

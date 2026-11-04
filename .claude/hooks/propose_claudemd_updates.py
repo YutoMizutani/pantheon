@@ -67,6 +67,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _transcript import iter_lines  # noqa: E402
+
 # --- Pattern sets ---
 
 _PROJECT_SCOPED_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -167,7 +170,7 @@ def _collect_turn_text(transcript_path: str) -> tuple[str, str]:
     user_parts: list[str] = []
     assistant_parts: list[str] = []
     try:
-        for line in p.read_text(encoding="utf-8").splitlines():
+        for line in iter_lines(p):
             line = line.strip()
             if not line:
                 continue
