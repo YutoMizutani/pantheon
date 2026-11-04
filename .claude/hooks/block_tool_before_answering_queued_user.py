@@ -29,6 +29,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -64,13 +65,20 @@ def _is_visible(c) -> bool:
     return False
 
 
+# harness が user の発話の前に差し込む指示ブロック（Chrome 拡張の <browser_instruction> 等）は
+# user の言葉ではない。残すと引用がその指示文になり、短い了承（「y」）も長文扱いで止める。
+_INJECTED_BLOCK_RE = re.compile(r"<browser_instruction>.*?</browser_instruction>", re.S)
+
+
 def _queued_text(att: dict) -> str:
     p = att.get("prompt")
     if isinstance(p, str):
-        return p
-    if isinstance(p, list):
-        return " ".join(x.get("text", "") for x in p if isinstance(x, dict))
-    return ""
+        raw = p
+    elif isinstance(p, list):
+        raw = " ".join(x.get("text", "") for x in p if isinstance(x, dict))
+    else:
+        return ""
+    return _INJECTED_BLOCK_RE.sub(" ", raw)
 
 
 def unanswered_queued(transcript: Path) -> list[str]:
