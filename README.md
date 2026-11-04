@@ -94,6 +94,7 @@ memory は 1 つのリポジトリに 1 か所（`heaven/memory/`）なので、
 | ローカル層（ignored） | この環境のユーザー固有の人格・状態 | `.local/`（CLAUDE.local.md・PROJECTS.md・settings.local.json・memory）・projects/* |
 
 - ローカル層の実体は `.local/` 1 か所に集め、harness が決まったパスで読む場所（root の `CLAUDE.local.md` など）へは symlink を張ります。別マシンへの移植は「clone → `.local/` を配置 → `bash heaven/tools/relink-local.sh`」の 3 手です（→ [.local/README.md](.local/README.md)）。
+- 配る前の検査: `bash heaven/tools/frame_smoke.sh`（commit 済みのファイルだけを一時フォルダに展開し、hook・層の検査・relink が通るかを確かめます）。
 - ルート直下とユーザー所有領域（`projects/` `heaven/`）は **ローカルが既定**: 運用中に増えた個人ファイルは `git status` に現れません。
 - フレーム層ディレクトリ（`.claude/` `docs/` `heaven/tools/`）の内側は **tracked が既定**: 運用中に育てた hook や doc が `git status` に現れ、「フレームに戻すか、ローカルに残すか」を判断するきっかけになります。
 - 環境固有の ignore 追加は `.gitignore` でなく `.git/info/exclude` へ（`.gitignore` 自体がフレーム層のため）。
