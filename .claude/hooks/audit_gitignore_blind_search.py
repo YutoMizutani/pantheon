@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook (matcher: Bash) — warn when a grep-family command will be
+"""PreToolUse hook (matcher: Bash) — record (observe only) when a grep-family command will be
 SILENTLY blind to this repo's gitignored local layer, or uses a ripgrep-only
 ignore flag that fails on the ugrep wrapper.
 
@@ -19,7 +19,9 @@ Background (see feedback_grep_residual_refs_blind_to_gitignored_config.md):
   KNOW exists) before trusting any 0.
 
 Contract (NON-BLOCKING, fail-quiet):
-  - NEVER denies. Emits a stderr reminder (exit 0) only; instruments via record_fire.
+  - NEVER denies and prints nothing (since 2026-10-12); only instruments via
+    record_fire("observe"). The warning lives in flag_empty_blind_search_result.py
+    (PostToolUse), which imports _blind_hits from this file.
   - Fires ONLY on a grep/egrep/fgrep verb (NOT rg, NOT `git grep`) that either
       (a) carries a ripgrep-only ignore flag (--no-ignore[-vcs/-parent/-dot/-global],
           --unrestricted, -uu) => silent exit 2 on ugrep; or

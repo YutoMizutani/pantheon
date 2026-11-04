@@ -5,10 +5,10 @@ from pathlib import Path
 H = Path(__file__).resolve().parent.parent if Path(__file__).resolve().parent.name == "tests" else Path.cwd() / ".claude" / "hooks"
 cases = [
  ("block_timeout_binary_on_macos", {"tool_name":"Bash","tool_input":{"command":"cd /x && timeout 90 ls"}}, "deny"),
- ("block_unquoted_glob_in_grep", {"tool_name":"Bash","tool_input":{"command":"grep -rn foo --include=*.py ."}}, "ctx"),
- ("block_redirect_inside_for_in", {"tool_name":"Bash","tool_input":{"command":"for f in a b 2>/dev/null; do echo $f; done"}}, "ctx"),
- ("block_sed_zero_addr_range", {"tool_name":"Bash","tool_input":{"command":"sed '0,/re/s/a/b/' f.txt"}}, "ctx"),
- ("block_inline_workflow_ts_syntax", {"tool_name":"Workflow","tool_input":{"script":"export const meta = {name:'x', description:'y'}\nconst a: string[] = []\n"}}, "ctx"),
+ ("hint_unquoted_glob_in_grep", {"tool_name":"Bash","tool_input":{"command":"grep -rn foo --include=*.py ."}}, "ctx"),
+ ("hint_redirect_inside_for_in", {"tool_name":"Bash","tool_input":{"command":"for f in a b 2>/dev/null; do echo $f; done"}}, "ctx"),
+ ("hint_sed_zero_addr_range", {"tool_name":"Bash","tool_input":{"command":"sed '0,/re/s/a/b/' f.txt"}}, "ctx"),
+ ("hint_inline_workflow_ts_syntax", {"tool_name":"Workflow","tool_input":{"script":"export const meta = {name:'x', description:'y'}\nconst a: string[] = []\n"}}, "ctx"),
 ]
 bad = 0
 for name, payload, want in cases:

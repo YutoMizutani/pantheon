@@ -158,7 +158,7 @@ const GATHER_SCHEMA = {
     purpose: { type: 'string', description: 'CLAUDE.md 役割/目的セクション + PROJECTS.md 1行説明の要約' },
     current_state: { type: 'string', description: 'SCOPE チェックリスト gap / outputs 最新 mtime / app 有無' },
     recent_user_activity: { type: 'array', items: { type: 'string' }, description: '上位 foreground exe+分, 対象 project 関連の最近 Claude topic/ship_paths' },
-    live_signal_findings: { type: 'array', items: { type: 'string' }, description: '実値を引用 (例 "COLD hook: block_evidence_jump 0fire/30d")' },
+    live_signal_findings: { type: 'array', items: { type: 'string' }, description: '実値を引用 (例 "COLD hook: audit_evidence_jump 0fire/30d")' },
     dark_signal_opportunities: { type: 'array', items: { type: 'string' }, description: '対象 project に該当する DARK シグナル = bootstrapping ネタ' },
     query_notes: { type: 'string', description: '失敗した query や caveat を正直に。捏造禁止' },
   },

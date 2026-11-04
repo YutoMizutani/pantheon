@@ -2,7 +2,7 @@
 """PostToolUse hook (matcher: Bash) — a gitignore-blind search that returned
 NOTHING is the only harmful case; flag it at the moment of interpretation.
 
-Companion to ``block_gitignore_blind_search.py`` (PreToolUse), whose warning text
+Companion to ``audit_gitignore_blind_search.py`` (PreToolUse), whose warning text
 was never delivered: it wrote to stderr and exited 0, and this harness does not
 show stdout/stderr of an exit-0 hook to the model (measured 2026-10-12: all 615
 ``[grep-blind]`` attachments carry ``"content": ""``). The reminder that DID
@@ -22,7 +22,7 @@ Contract (NON-BLOCKING, fail-quiet):
   - Never blocks (the tool already ran). Emits hookSpecificOutput.additionalContext
     on stdout (+ a stderr copy) and exits 0.
   - Fires only when BOTH hold: (a) the command is a grep-family invocation that
-    ``block_gitignore_blind_search._blind_hits`` flags, (b) the tool response has
+    ``audit_gitignore_blind_search._blind_hits`` flags, (b) the tool response has
     empty stdout (or the "no output" marker).
   - Any unexpected payload shape => silent exit 0.
 """
@@ -33,7 +33,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from block_gitignore_blind_search import _blind_hits  # noqa: E402
+    from audit_gitignore_blind_search import _blind_hits  # noqa: E402
 except Exception:  # detector must stay single-source; no local copy
     def _blind_hits(_cmd):  # type: ignore
         return iter(())

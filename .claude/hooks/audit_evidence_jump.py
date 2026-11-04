@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""block_evidence_jump — linguistic scanner for entity-disappearance assertions
+"""audit_evidence_jump — linguistic scanner for entity-disappearance assertions
 paired with destructive remediation switches.
 
 Memory rule:
@@ -65,7 +65,7 @@ _DESTRUCTIVE_REMEDIATION_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 from _paths import RUNTIME_DIR  # noqa: E402
-_AUDIT_LOG = RUNTIME_DIR / "block_evidence_jump_audit.log"
+_AUDIT_LOG = RUNTIME_DIR / "audit_evidence_jump.log"
 
 
 def _read_payload() -> dict:
@@ -185,7 +185,7 @@ def main() -> int:
             context=f"d:{dtokens}|r:{rtokens}",
         )
         sys.stderr.write(
-            f"[block_evidence_jump] evidence-jump pattern detected: "
+            f"[audit_evidence_jump] evidence-jump pattern detected: "
             f"disappearance={dtokens} + remediation={rtokens}. "
             "Per feedback_cross_check_evidence_before_destructive_plan: "
             "cross-check parallel signals (pid_count / TCP / status) before "
@@ -200,5 +200,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception as exc:
-        sys.stderr.write(f"[block_evidence_jump] error: {exc}\n")
+        sys.stderr.write(f"[audit_evidence_jump] error: {exc}\n")
         sys.exit(0)

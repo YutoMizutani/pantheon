@@ -12,7 +12,7 @@ Background (see feedback_no_unquoted_equals_word_under_zsh.md):
   separator never run. In a long compound verification chain this throws away
   the partial output and forces a full re-run round-trip. This is the same
   abort-the-whole-line failure family as nomatch globs
-  (block_unquoted_glob_in_grep.py).
+  (hint_unquoted_glob_in_grep.py).
 
   Observed 2026-06-11 session df1e3bef: two compound verification commands
   (entries 64, 260) used `echo ===` separators; both aborted with

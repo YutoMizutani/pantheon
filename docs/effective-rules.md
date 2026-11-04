@@ -122,7 +122,7 @@
 **3 層**:
 - CLAUDE.md: なし
 - Memory: `feedback_cross_check_evidence_before_destructive_plan.md`
-- Hook: `block_evidence_jump.py` (本フレーム同梱・非配線 — 配線はローカル層の `settings.local.json`) — Stop 時に「N だけ起動」「残り N は消失」「壊れた」「provider 切替」など entity-disappearance / destructive-remediation switch phrase を検知
+- Hook: `audit_evidence_jump.py` (本フレーム同梱・非配線 — 配線はローカル層の `settings.local.json`) — Stop 時に「N だけ起動」「残り N は消失」「壊れた」「provider 切替」など entity-disappearance / destructive-remediation switch phrase を検知
 
 **効いている根拠**: 原環境での VSCode tunnel 復旧時に `pid_count` を見ながらウィンドウ消失を誤 diagnose した事故から導出。導入後、同型の「単一シグナル過信」は本人観測で再発なし。
 
@@ -292,7 +292,7 @@
 | SHOULD | No version tokens | memory（`block_version_tokens.py` は 2026-10-25 退役・`.archive/`） |
 | SHOULD | No gitignored refs | memory + `block_repo_root_artifacts.py` |
 | SHOULD | Strip user names | memory + `strip_user_names.py` |
-| OPTIONAL | Cross-check evidence | memory + `block_evidence_jump.py` |
+| OPTIONAL | Cross-check evidence | memory + `audit_evidence_jump.py` |
 | OPTIONAL | No dangling script | memory + `audit_dangling_script_announcement.py` |
 | OPTIONAL | Detect correction signal | `detect_correction_signal_v2.py` |
 
@@ -316,7 +316,7 @@
 | `detect_correction_signal_v2.py` | UserPromptSubmit | (all) | ✅ (配線済み) |
 | `block_version_tokens.py` | PreToolUse | `Write\|Edit` | 退役 (2026-10-25、`.archive/`) |
 | `block_repo_root_artifacts.py` | PreToolUse | `Write\|Edit\|MultiEdit\|NotebookEdit\|Bash` | レシピ (未同梱) |
-| `block_evidence_jump.py` | Stop | (all) | レシピ (非配線) |
+| `audit_evidence_jump.py` | Stop | (all) | ✅ 同梱 (配線はローカル層 `.local/settings.local.json`) |
 | `audit_dangling_script_announcement.py` | Stop | (all) | レシピ (未同梱) |
 
 ---
