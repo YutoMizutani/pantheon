@@ -7,6 +7,7 @@
 ```
 projects/<name>/
 ├── CLAUDE.md        # エージェントの人格・役割・禁止事項（※必ず書き換える）
+├── GROWTH.md        # 成長特性とプロジェクトの強み（育ってきたら書き足す）
 ├── .claude/         # Claude Code 拡張の置き場（settings.json の骨格のみ）
 ├── context/         # ドメイン知識・前提条件・用語集など
 ├── tools/           # スクリプト・ツール類

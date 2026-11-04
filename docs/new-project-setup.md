@@ -9,6 +9,7 @@
 ```
 projects/<name>/
 ├── CLAUDE.md        # エージェントの人格・役割・禁止事項などの定義
+├── GROWTH.md        # 成長特性とプロジェクトの強み（使うほど良くなる理由とその証拠。規則は写さない）
 ├── .claude/         # Claude Code 拡張の置き場（テンプレートは settings.json の骨格のみ）
 │                    #   ※ agents / commands / skills は必要になったときに自作して育てる
 ├── apps/            # 実アプリ本体（apps/<app-name>/ に配置。下記「apps/ 規約」参照。任意 — 持つときのみ）
