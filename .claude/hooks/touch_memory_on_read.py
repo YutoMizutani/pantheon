@@ -44,10 +44,10 @@ def _read_payload() -> dict:
 
 def main() -> int:
     data = _read_payload()
-    if (data.get("tool_name") or data.get("tool")) != "Read":
+    if data.get("tool_name") != "Read":
         return 0
-    tool_input = data.get("tool_input") or data.get("toolInput") or {}
-    file_path = tool_input.get("file_path") or tool_input.get("filePath")
+    tool_input = data.get("tool_input") or {}
+    file_path = tool_input.get("file_path")
     if not file_path:
         return 0
     if not is_memory_path(file_path):
