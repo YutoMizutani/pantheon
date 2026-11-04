@@ -190,7 +190,7 @@ printf '#!/bin/bash\necho ran >> "%s"\n' "$T/g/pre-refill.ran" > "$T/g/proj/.loc
 printf '#!/bin/bash\n{ echo "ARGS=$#"; cat; echo; echo ">>"; } >> "%s"\n' "$T/g/notify.txt" > "$T/g/proj/.local/todo-loop/notify.sh"; chmod +x "$T/g/proj/.local/todo-loop/notify.sh"
 plan g '{"refill": {"refill": {"do": "append", "n": 1}}, "story": {"S-02": {"state": "done"}}}'
 env TODO_LOOP_CLAUDE="$FAKE" FAKE_PLAN="$T/g/plan.json" FAKE_TODO="$T/g/proj/TODO.md" FAKE_LOG="$T/g/prompts" bash "$RUN" "$T/g/proj" > "$T/g/out.txt" 2>&1
-chk "積んでから 1 件実行（時刻指定なし）" bash -c "grep -q '実行 1 件' '$T/g/out.txt' && grep -q '停止理由: 1 件実行（時刻指定なし）' '$T/g/out.txt'"
+chk "積んでから 1 件実行し、2 回目は積まずに止まる（積み足しは起動につき 1 回）" bash -c "grep -q '実行 1 件' '$T/g/out.txt' && grep -q '停止理由: 実行できるストーリーが無い（積み足しはこの起動で 1 回済み）' '$T/g/out.txt' && [ \$(ls '$T/g/prompts' | grep -c .) -eq 2 ]"
 chk "pre-refill.sh が 1 回走った" test "$(wc -l < "$T/g/pre-refill.ran" | tr -d ' ')" = 1
 chk "notify.sh に 1 通（引数なし・本文だけ）" bash -c "[ \$(grep -c '^ARGS=0$' '$T/g/notify.txt') -eq 1 ] && grep -q '実行 1 件' '$T/g/notify.txt'"
 chk "台帳を作っていない" test ! -e "$T/g/proj/.local/todo-loop/ledger"
@@ -359,6 +359,76 @@ chk "標準出力に [todo-loop] [grade] の行" bash -c "[ \$(grep -c '^\[todo-
 chk "audits/ に監査 2 本" test "$(ls "$T/l/state/audits/${DAYK}"_S-0[12].md 2>/dev/null | wc -l | tr -d ' ')" -eq 2
 runner l0 TODO_LOOP_COUNT=2 TODO_LOOP_NO_REFILL=1 FAKE_GRADE_LOG="$T/l0/grader.log" "${GL[@]}"
 chk "TODO_LOOP_GRADE 未設定 → 2 件実行・偽の採点者 0 回・audits/ 無し・本文に（採点）無し" bash -c "grep -q '実行 2 件' '$T/l0/out.txt' && [ $(calls l0) -eq 0 ] && [ ! -e '$T/l0/state/audits' ] && ! grep -q '（採点）' '$T/l0/sent.txt'"
+
+echo "== (m) 上限と連鎖: 既定は 10 件まで・COUNT と UNTIL でも 10 件・直前の回が長ければ 1 件で止まる"
+for c in m1 m2 m3 m4 m5; do
+  mkproj $c
+  PL=""; for i in 01 02 03 04 05 06 07 08 09 10 11 12; do story S-$i 話$i todo >> "$T/$c/proj/TODO.md"; PL="$PL\"S-$i\": {\"state\": \"done\"},"; done
+  plan $c "{\"story\": {${PL%,}}}"
+done
+runner m1 TODO_LOOP_NO_REFILL=1 TODO_LOOP_NO_NOTIFY=1
+chk "既定（連鎖）: 12 件中 10 件で止まる・停止理由は上限" bash -c "grep -q '実行 10 件' '$T/m1/out.txt' && grep -q '停止理由: 上限 10 件' '$T/m1/out.txt'"
+runner m2 TODO_LOOP_COUNT=1000 TODO_LOOP_NO_REFILL=1 TODO_LOOP_NO_NOTIFY=1
+chk "COUNT=1000 でも 10 件で止まる" bash -c "grep -q '実行 10 件' '$T/m2/out.txt' && grep -q '停止理由: 上限 10 件' '$T/m2/out.txt'"
+runner m3 TODO_LOOP_UNTIL=23:59 TODO_LOOP_NO_REFILL=1 TODO_LOOP_NO_NOTIFY=1
+chk "UNTIL 指定でも 10 件で止まる" bash -c "grep -q '実行 10 件' '$T/m3/out.txt' && grep -q '停止理由: 上限 10 件' '$T/m3/out.txt'"
+runner m5 TODO_LOOP_UNTIL="$(date -v-1M +%H:%M)" TODO_LOOP_NO_REFILL=1 TODO_LOOP_NO_NOTIFY=1
+chk "UNTIL が今日の過ぎた時刻なら翌日の時刻として扱い、即停止しない（23 時台に 01:30 を渡す場合）" bash -c "grep -q '実行 10 件' '$T/m5/out.txt' && ! grep -q 'を過ぎた' '$T/m5/out.txt'"
+runner m4 TODO_LOOP_CHAIN_UNDER_SEC=-1 TODO_LOOP_NO_REFILL=1 TODO_LOOP_NO_NOTIFY=1
+chk "直前の回が連鎖の時間を超えたら 1 件で止まる" bash -c "grep -q '実行 1 件' '$T/m4/out.txt' && grep -q '停止理由: 直前の回が' '$T/m4/out.txt'"
+
+echo "== (n) ログイン切れ: ストーリーを blocked にせず状態も TODO.md も変えずに止まる（積み足しの回も同じ）"
+mkproj n1
+for i in 01 02 03; do story S-$i 話$i todo >> "$T/n1/proj/TODO.md"; done
+plan n1 '{"auth_fail": true}'
+cp "$T/n1/proj/TODO.md" "$T/n1/before.md"
+runner n1 TODO_LOOP_NO_NOTIFY=1
+chk "ログイン切れ: TODO.md は変わらない（blocked も引き継ぎの追記も無い）" cmp -s "$T/n1/before.md" "$T/n1/proj/TODO.md"
+chk "ログイン切れ: 1 回で止まり、停止理由にログインが出る" bash -c "[ \$(ls '$T/n1/prompts' | wc -l) -eq 1 ] && grep -q '停止理由: Claude のログインが切れ' '$T/n1/out.txt'"
+mkproj n2
+story S-01 済んだ物 done >> "$T/n2/proj/TODO.md"
+mkdir -p "$T/n2/state/passes/01_one" "$T/n2/state/passes/02_two"
+echo "観点1" > "$T/n2/state/passes/01_one/lens"; echo "観点2" > "$T/n2/state/passes/02_two/lens"
+plan n2 '{"auth_fail": true}'
+runner n2 TODO_LOOP_REFILL_ONLY=1 TODO_LOOP_NO_NOTIFY=1
+chk "積み足しでログイン切れ: 2 本目の回を始めない" bash -c "[ \$(ls '$T/n2/prompts' | wc -l) -eq 1 ] && grep -q 'ログインが切れ' '$T/n2/out.txt'"
+
+echo "== (o) 利用上限の判定: 会話記録に実際に出た文言（モデル別・種別なしを含む）を全部拾い、上限でない行は拾わない"
+eval "$(grep '^is_limit()' "$RUN")"
+mkdir -p "$T/o"
+i=0
+for m in "You've hit your session limit · resets 4:30pm (Asia/Tokyo)" "You've hit your weekly limit · resets Oct 30, 2am (Asia/Tokyo)" \
+         "You've hit your Fable limit · resets 9am (Asia/Tokyo)" "You've hit your limit · resets 3pm (Asia/Tokyo)"; do
+  i=$((i + 1)); printf '%s\n' "$m" > "$T/o/$i.log"
+  chk "上限として拾う: $m" is_limit "$T/o/$i.log"
+done
+printf '%s\n' "rate limit の説明を書いた" "limit=3600s" > "$T/o/none.log"
+chk "上限でない行は拾わない" bash -c "! grep -qiE \"$(grep '^is_limit()' "$RUN" | sed -E 's/.*grep -qiE "([^"]+)".*/\1/')\" '$T/o/none.log'"
+
+echo "== (j2) approvals_out.py を相対パスで手で呼んでも approve.sh が見つかる"
+mkproj j2
+printf '\n## S-05 — 公開する | 実装 | opus | awaiting-approval\n- 範囲: 公開\n- 外部作用: git push origin main\n' >> "$T/j2/proj/TODO.md"
+printf '#!/bin/bash\ncat >/dev/null; echo A-0000-rel01; echo sent\n' > "$T/j2/state/approve.sh"; chmod +x "$T/j2/state/approve.sh"
+( cd "$T/j2" && python3 -B "$S/approvals_out.py" --todo proj/TODO.md --state state --project proj ) > "$T/j2/out.txt" 2>&1
+chk "相対パスでも 1 件送れる（sent=1）" has "$T/j2/out.txt" "sent=1 "
+chk "相対パスでも送信済みを記録する" test -s "$T/j2/state/approvals_sent.json"
+
+echo "== (k) 途中報告: 5 件を 2 件ごとに区切る → 途中報告 2 通（各区切りの PDF にはその区切りの回だけ）＋最後の 1 通"
+mkproj k
+{ story S-01 一の回 todo; story S-02 二の回 todo; story S-03 三の回 todo; story S-04 四の回 todo; story S-05 五の回 todo; } >> "$T/k/proj/TODO.md"
+send_sh k
+plan k '{"story": {"S-01": {"state": "done"}, "S-02": {"state": "done"}, "S-03": {"state": "done"}, "S-04": {"state": "done"}, "S-05": {"state": "done"}}}'
+runner k TODO_LOOP_COUNT=5 TODO_LOOP_NO_REFILL=1 TODO_LOOP_REPORT_EVERY=2
+chk "5 件実行した" has "$T/k/out.txt" "実行 5 件"
+chk "途中報告が 2 通（その1・その2）" bash -c "grep -q '途中報告 その1（この区切り 2 件・累計 2 件）' '$T/k/sent.txt' && grep -q '途中報告 その2（この区切り 2 件・累計 4 件）' '$T/k/sent.txt'"
+chk "send.sh の呼び出しは run だけで 3 回" test "$(grep -c '^KIND=run' "$T/k/sent.txt")" -eq 3
+chk "その1 の本文に S-01 があり S-03 が無い" python3 -c "import sys; t=open('$T/k/sent.txt').read().split('BODY<<'); b=[x for x in t if '途中報告 その1' in x][0]; sys.exit(0 if '- S-01 ' in b and '- S-03 ' not in b else 1)"
+chk "最後の本文は最後の区切りの 1 件だけ（S-05 があり S-04 が無い）" python3 -c "import sys; b=open('$T/k/sent.txt').read().split('BODY<<')[-1]; sys.exit(0 if '途中報告 2 回の後の 1 件' in b and '- S-05 ' in b and '- S-04 ' not in b else 1)"
+chk "途中報告の本文に残り件数" has "$T/k/sent.txt" "残り（todo・doing・approved）: 3 件"
+H2="$(ls "$T"/k/state/reports/run/*-p2/todo-run-*.html 2>/dev/null | head -1)"
+chk "その2 の報告 HTML が別の置き場にある" test -n "$H2"
+chk "その2 の HTML に S-03 があり S-01 が無い" bash -c "grep -q '三の回' '$H2' && ! grep -q '一の回' '$H2'"
+chk "途中報告を指定しなければ送るのは最後の 1 通だけ（(c) と同じ）" bash -c "! grep -q 途中報告 '$T/c/sent.txt'"
 
 echo "== (i) 全スクリプトの構文・文字化け"
 for f in "$S"/*.sh "$HERE"/*.sh; do chk "bash -n $(basename "$f")" bash -n "$f"; done

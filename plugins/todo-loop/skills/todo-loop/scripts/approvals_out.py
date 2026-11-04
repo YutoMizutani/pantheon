@@ -54,6 +54,7 @@ def main():
     ap.add_argument("--state", required=True)
     ap.add_argument("--project", required=True)
     a = ap.parse_args()
+    a.state = os.path.abspath(a.state)   # approve.sh はプロジェクトに移ってから呼ぶので、相対パスのままだと見つからない
     approve = os.path.join(a.state, "approve.sh")
     if not os.access(approve, os.X_OK):
         print("[approvals] approve.sh が無い（送らない）")

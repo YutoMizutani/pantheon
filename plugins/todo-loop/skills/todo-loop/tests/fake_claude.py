@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """試験用の偽の claude（TODO_LOOP_CLAUDE に渡す）。最後の引数の指示書を読み、FAKE_PLAN（JSON）の指定どおりに TODO.md を書き換える。
 
-FAKE_PLAN = {"refill": {"<観点の回>": {"do": "append" | "break" | "nothing", "n": 1, "cite": ["Q-..."], "report": true}},
+FAKE_PLAN = {"auth_fail": true,  # ログイン切れで失敗する（任意）
+             "refill": {"<観点の回>": {"do": "append" | "break" | "nothing", "n": 1, "cite": ["Q-..."], "report": true}},
              "story":  {"<ID>": {"state": "done", "report": true}}}
 FAKE_TODO = 書き換える TODO.md。FAKE_LOG = 指示書を 1 回ずつ保存するディレクトリ。
 """
@@ -30,6 +31,10 @@ def report(path, sid_list, title):
                 "つまづいたこと": "無し", "工夫したところ": "試験の工夫", "何が嬉しいのか": "試験が嬉しい", "発展可能性": "試験の先",
                 "完了したかどうか": "完了"}], open(path, "w", encoding="utf-8"), ensure_ascii=False)
 
+
+if plan.get("auth_fail"):  # ログイン切れ: 何も書き換えず、本物と同じ文を出して失敗する
+    print("Failed to authenticate: OAuth session expired and could not be refreshed")
+    sys.exit(1)
 
 text = open(todo, encoding="utf-8").read()
 sid = header("ストーリー ID")

@@ -41,7 +41,7 @@ runner の本体は `scripts/run.sh`、各セッションへの指示書は `scr
 ## 起動するとき
 
 1. **引数を決める。** 足りない値は聞かずに既定で埋め、報告に書く。
-   - `until`: この時刻を過ぎたら新しいセッションを始めない（その直前に始まった回が最後）。無ければ 1 件だけ実行して終わる。
+   - `until`: この時刻を過ぎたら新しいセッションを始めない（その直前に始まった回が最後）。無ければ連鎖（直前の回が 10 分以内に終わり、起動から 1 時間以内なら次も始める）。どの指定でも 1 回の起動で実行するのは 10 件まで（`TODO_LOOP_MAX_STORIES`）。
    - `end`: 各セッションをこの時刻で打ち切る。無ければ `until` の 1 時間後。
    - `lens`: 積み足しの観点。`<状態>/passes/` か `<状態>/lens` があれば、それを runner が読むので `TODO_LOOP_LENS` を渡さない（上の表）。無ければ、プロジェクトに `TODO-lens.md` があればそれ。無ければ user の言葉から 1 枚書く（「何を良くしたいか」を 3〜10 行。user が観点を言っていなければ、プロジェクトの CLAUDE.md の目的から書き、`<プロジェクト>/TODO-lens.md` に置く）。
 2. **TODO.md を用意する。** 無ければ `templates/TODO.md` を写し、`{{目的}}` と「積まない物」をそのプロジェクトの CLAUDE.md から埋める。あれば運用節の見出しの書式（`## S-NN — <項目> | <調査|実装> | <fable|opus> | <状態>`）が runner と同じかだけ確かめる。
@@ -60,6 +60,7 @@ runner の本体は `scripts/run.sh`、各セッションへの指示書は `scr
 
 - status: `running.pid` の生死、`drive.out` の末尾、`runs/history.log` の末尾 5 行、TODO.md の状態ごとの件数を出す。
 - stop: `running.pid` の pid を `kill` し、走っている回の `claude -p` は `pgrep -fl "ストーリー ID: S-"` で該当 pid を見て `kill <pid>`（名前で一括に止めない）。止めた回のストーリーは `doing` のまま残り、次の起動で進捗ファイルから続く。
+- **承認待ちを user に示す・承認を取り次ぐときは、`python3 <skill>/scripts/report.py pending <TODO.md>` の出力（ID・題・外部作用 欄の全文）だけを使う。** 自分で書いた正規表現・`sed` の範囲で切り出さない（見出しの区切りを誤ると、ある ID の題に別のストーリーの外部作用が付き、違う操作の承認を取ることになる）。外部作用 欄はそのまま引用し、欄に書かれた件数がその後に変わっていないかを今の状態で数え直してから示す。
 
 ## 定時にするとき
 
@@ -82,7 +83,8 @@ runner の本体は `scripts/run.sh`、各セッションへの指示書は `scr
 ## runner の振る舞い（説明を求められたとき・設定を変えるとき）
 
 - 選び方: `doing` があればそれ → 無ければ上から、`todo` / `approved` で依存がすべて済んだもの。`blocked` / `needs-user` / `awaiting-approval` は飛ばす。
-- 1 セッションの打ち切り 3600 秒（`TODO_LOOP_LIMIT_SEC`）、`end` までの残りに縮める。打ち切り・途中終了は `doing` に戻して次の回が進捗ファイルから続ける。2 回続いたら残りを分け直させ、4 回で `blocked`。時刻指定が無ければ `TODO_LOOP_COUNT` 件（既定 1）で終わる。
+- 1 セッションの打ち切り 3600 秒（`TODO_LOOP_LIMIT_SEC`）、`end` までの残りに縮める。打ち切り・途中終了は `doing` に戻して次の回が進捗ファイルから続ける。2 回続いたら残りを分け直させ、4 回で `blocked`。1 回の起動で実行するのは `TODO_LOOP_MAX_STORIES` 件（既定 10）まで（`until`・`TODO_LOOP_COUNT` の指定でも効く）。時刻指定が無ければ連鎖: 直前の回が `TODO_LOOP_CHAIN_UNDER_SEC`（既定 600）以内に終わり、起動から `TODO_LOOP_CHAIN_WINDOW_SEC`（既定 3600）以内なら次を始める（`TODO_LOOP_COUNT` を渡せばその件数）。積み足しは時刻指定が無ければ起動につき `TODO_LOOP_MAX_REFILLS` 回（既定 1）。
+- 途中報告: `TODO_LOOP_REPORT_EVERY=N` を付けると、N 件実行するごとにその N 件の報告 PDF（`reports/run/<起動の時刻>-p<番号>/`）と本文（区切りの回・累計・残り件数・次の候補）を送る。長い起動（全消化など）で、終わるまで何も届かない状態を避ける。
 - 利用上限: メッセージの「resets 3pm」の時刻（読めなければ 3 時間後）＋2 分まで待ち、同じストーリーを続きから。再開が `until` 以降なら止める。上限の回は中断回数に数えない。passes の途中で上限に当たったら、残りの回は見送る。
 - 積み足し: 回ごとに、末尾追記・見出しが読める・ID の重複 0・U+FFFD 0・1 件以上増えた、のどれかが崩れたら TODO.md をその回の前に戻す（`history.log` に `refill <回> ok|fail|limit`）。積み足しの後に 1 件も実行できなければ止まる（空回りしない）。
 - 報告: 各セッションは `<状態>/reports/<run|create>/<起動の時刻>/` に 8 項目の JSON（課題・やったこと・まとめ・つまづいたこと・工夫したところ・何が嬉しいのか・発展可能性・完了したかどうか）を書き、`report.py check` が OK になるまで直す。runner は起動の終わりに `report.py build` で PDF にする（報告の無いストーリーは TODO.md から補完し「報告なし」と明記。末尾に毎回、承認待ちの一覧と各ストーリーの 外部作用 欄）。Chrome は `TODO_LOOP_CHROME` → macOS の標準の位置 → PATH の chromium / google-chrome の順に探し、無ければ HTML だけ作る。`TODO_LOOP_NO_REPORT=1` で作らない。

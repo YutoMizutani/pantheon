@@ -213,7 +213,15 @@ def main():
     b.add_argument("--fallback", nargs="*")
     c = sub.add_parser("check")
     c.add_argument("path")
+    p = sub.add_parser("pending", help="承認待ち（awaiting-approval）の ID・題・外部作用 欄の全文を出す（承認を取り次ぐときはこれを引用する）")
+    p.add_argument("todo")
     a = ap.parse_args()
+    if a.cmd == "pending":
+        rows = [s for s in stories(a.todo) if s["状態"] == "awaiting-approval"]
+        for s in rows:
+            print(f"### {s['id']} — {s['題']}\n- 外部作用: {field(s['body'], '外部作用', multiline=True)}\n")
+        print(f"承認待ち {len(rows)} 件")
+        return
     if a.cmd == "build":
         pdf, src, n = build(a.kind, a.dir, a.title, a.out, a.todo, a.fallback)
         print(f"[report] {pdf or src}（{n} 件）")

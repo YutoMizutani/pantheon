@@ -10,7 +10,9 @@
 # 時刻指定の連続実行:
 #   UNTIL（HH:MM）より前なら 1 SP = 1 セッションで次々に始める。UNTIL を過ぎたら新しいセッションを始めない。
 #   END（HH:MM）があれば、各セッション（積む側も）の打ち切りをその時刻までに縮める。
-#   UNTIL が無ければ COUNT 件（既定 1）だけ実行して終わる（無ければ積んでから実行）。
+#   UNTIL が無ければ連鎖: 1 件目の後は、直前の回が CHAIN_UNDER_SEC（既定 600）以内に終わり、起動から CHAIN_WINDOW_SEC
+#   （既定 3600）以内のときだけ次を始める。COUNT を渡せば連鎖の代わりにその件数。積み足しは起動につき MAX_REFILLS 回（既定 1）。
+# 上限: どの起動でも実行は MAX_STORIES 件（既定 10）まで（UNTIL・COUNT の指定でも効く）。
 # 利用上限: メッセージの「resets 10:20am」の時刻（読めなければ 3 時間後）＋2 分まで待ち、同じストーリーを
 #   進捗ファイルから再開する。再開時刻が UNTIL 以降なら止める。
 # 選び方: doing があればそれを続ける → 無ければ上から、todo / approved で依存が全部済んだもの。
@@ -36,9 +38,11 @@
 #   積み足しの後に 1 件も実行できなければ空回りを避けて止まる。観点が無ければ積み足さない。
 # 状態の置き場: <プロジェクト>/.local/todo-loop/（runs/・progress/・reports/・ledger/・running.pid）。TODO_LOOP_STATE で差し替え可（試験用）。
 #
-# 環境変数: TODO_LOOP_UNTIL / END / LENS / COUNT（既定 1）/ LIMIT_SEC（既定 3600）/ REFILL_LIMIT_SEC（既定 2700）/ RESPLIT_AT（既定 2）/
+# 環境変数: TODO_LOOP_UNTIL / END / LENS / COUNT（連鎖の代わりの件数）/ MAX_STORIES（既定 10）/ CHAIN_UNDER_SEC（既定 600）/
+#   CHAIN_WINDOW_SEC（既定 3600）/ MAX_REFILLS（UNTIL 無しの積み足し回数、既定 1）/ LIMIT_SEC（既定 3600）/ REFILL_LIMIT_SEC（既定 2700）/ RESPLIT_AT（既定 2）/
 #   MAX_RESUME（既定 4）/ DRY / NO_REFILL / REFILL_ONLY（積むだけ）/ NO_NOTIFY / NO_REPORT / LEDGER（1 で台帳を強制）/
 #   CHROME（PDF に使うブラウザ）/ CLAUDE（claude の代わりに呼ぶ物。試験用）/ STATE /
+#   REPORT_EVERY（N 件実行するごとに、その N 件の報告 PDF を作って送る途中報告。既定 off）/
 #   GRADE（1 で done になった回を scripts/grade.sh で採点。既定 off）/ GRADER（codex|claude）/ GRADE_*（grade.sh の先頭コメント）
 
 set -u
@@ -51,7 +55,13 @@ RUNS="$STATE/runs"; PDIR="$STATE/progress"; LOCK="$STATE/running.pid"
 LIMIT="${TODO_LOOP_LIMIT_SEC:-3600}"
 RESPLIT_AT="${TODO_LOOP_RESPLIT_AT:-2}"
 MAX_RESUME="${TODO_LOOP_MAX_RESUME:-4}"
-COUNT_MAX="${TODO_LOOP_COUNT:-1}"
+COUNT_MAX="${TODO_LOOP_COUNT:-}"
+MAX_STORIES="${TODO_LOOP_MAX_STORIES:-10}"
+CHAIN_UNDER="${TODO_LOOP_CHAIN_UNDER_SEC:-600}"
+CHAIN_WINDOW="${TODO_LOOP_CHAIN_WINDOW_SEC:-3600}"
+MAX_REFILLS="${TODO_LOOP_MAX_REFILLS:-1}"
+REPORT_EVERY="${TODO_LOOP_REPORT_EVERY:-}"; SEG=1; SEG_COUNT=0
+T0="$(date +%s)"; LAST_SEC=0; REFILLS=0
 LENS="${TODO_LOOP_LENS:-}"
 [ -z "$LENS" ] && [ -f "$STATE/lens" ] && LENS="$(head -1 "$STATE/lens")"
 NAME="$(basename "$P")"
@@ -71,7 +81,7 @@ SUMMARY=(); CREATE_SUMMARY=()
 RAN_IDS=""; CREATED_IDS=""; REFILLED_ANY=""
 HEAD_RE='^## (S-\d+) — (.+?) \| (調査|実装) \| (fable|opus) \| ([\w-]+)\s*$'
 
-today_at() { [ -n "$1" ] && date -j -f "%Y-%m-%d %H:%M" "$(date +%Y-%m-%d) $1" +%s; }
+today_at() { [ -n "$1" ] || return 0; local t; t="$(date -j -f "%Y-%m-%d %H:%M" "$(date +%Y-%m-%d) $1" +%s)" || return 1; [ "$t" -le "$(date +%s)" ] && t=$(( t + 86400 )); echo "$t"; }
 UNTIL_TS="$(today_at "${TODO_LOOP_UNTIL:-}")"
 END_TS="$(today_at "${TODO_LOOP_END:-}")"
 
@@ -211,7 +221,10 @@ print(len(heads))
 PY
 }
 
-is_limit() { grep -qiE "hit your (session|usage|weekly) limit|usage limit reached" "$1"; }
+# 本体の文言は「You've hit your <種別> limit」で、種別はモデル名（Fable 等）・無し（hit your limit）も出る
+is_limit() { grep -qiE "hit your ([a-z0-9._-]+ )*limit|usage limit reached" "$1"; }
+# ログイン切れ。待っても直らない（人が /login する）ので、上限と違ってその起動はそこで止める
+is_auth_fail() { grep -qiE "Failed to authenticate|OAuth session expired|Invalid API key|Please run /login|not logged in" "$1"; }
 
 DISALLOWED_BASE="Bash(git commit:*),Bash(git push:*),Bash(git tag:*),Bash(gh:*),Bash(launchctl:*),Bash(crontab:*),Bash(sudo:*),Bash(twine:*),Bash(cargo publish:*),Bash(npm publish:*),mcp__discord-mcp__post_message"
 ALLOWED="Read,Edit,Write,Glob,Grep,WebFetch,WebSearch,Agent,Workflow,Skill,Bash"
@@ -266,7 +279,11 @@ refill_pass() {
   N1="$(check_todo "$BACKUP")"; OK=$?
   if [ "$OK" -ne 0 ] || [ "$N1" -le "$N0" ] 2>/dev/null; then
     cp "$BACKUP" "$TODO"; rm -f "$BACKUP"
-    if is_limit "$LOG"; then
+    if [ "$RC" -ne 0 ] && is_auth_fail "$LOG"; then
+      AUTH_FAIL="$(grep -iE "authenticate|OAuth|API key|/login|logged in" "$LOG" | tail -1)"
+      SUMMARY+=("（積み足し $label）ログイン切れで始まらなかった（TODO.md は戻した）")
+      echo "$STAMP refill $label auth log=$LOG" >> "$RUNS/history.log"
+    elif is_limit "$LOG"; then
       LIMIT_HIT="$(grep -iE "limit" "$LOG" | tail -1)"; SUMMARY+=("（積み足し $label）利用上限で止まった（TODO.md は戻した）")
       echo "$STAMP refill $label limit log=$LOG" >> "$RUNS/history.log"
     else
@@ -311,6 +328,7 @@ refill() {
     for d in "${PASS_DIRS[@]}"; do
       local pname; pname="$(basename "$d")"
       if [ -n "$LIMIT_HIT" ]; then SUMMARY+=("（積み足し $pname）見送り: 前の回が利用上限で止まった"); continue; fi
+      if [ -n "$AUTH_FAIL" ]; then SUMMARY+=("（積み足し $pname）見送り: 前の回がログイン切れで止まった"); continue; fi
       refill_pass "$pname" "$d" "$STAMP" && ANY=0
     done
   else
@@ -348,7 +366,11 @@ run_one() {  # 戻り値 0=実行した / 1=実行できる物が無い
   WD=$!
   wait "$PID"; RC=$?; pkill -P "$WD" 2>/dev/null; kill "$WD" 2>/dev/null
   local SEC=$(( $(date +%s) - S0 )) NEW
-  if [ "$RC" -ne 0 ] && is_limit "$LOG"; then
+  LAST_SEC="$SEC"
+  if [ "$RC" -ne 0 ] && is_auth_fail "$LOG"; then
+    # ログイン切れもストーリーの不具合ではない。状態を残し、中断回数にも数えない（blocked にすると 1 起動で 10 件ずつ止める）
+    NEW="$(state_of "$ID")"; AUTH_FAIL="$(grep -iE "authenticate|OAuth|API key|/login|logged in" "$LOG" | tail -1)"
+  elif [ "$RC" -ne 0 ] && is_limit "$LOG"; then
     # 利用上限はストーリーの不具合ではない。状態を残し（doing なら次の回が続ける）、中断回数にも数えない
     NEW="$(state_of "$ID")"; LIMIT_HIT="$(grep -iE "limit" "$LOG" | tail -1)"
   else
@@ -424,6 +446,18 @@ finish_reports() {
   fi
 }
 
+# 途中報告: ここまでの区切りの分を送り、次の区切りの報告を別の置き場に分ける（同じ回を 2 度載せない）
+interim_report() {
+  local B="[todo-loop $NAME] $(date '+%Y-%m-%d %H:%M') 途中報告 その$SEG（この区切り $SEG_COUNT 件・累計 $COUNT 件）" line SAVED="$REFILLED_ANY" LEFT
+  for line in "${SUMMARY[@]+"${SUMMARY[@]}"}"; do B="$B"$'\n'"- $line"; done
+  LEFT="$(grep -cE "^## S-[0-9]+ — .*\| *(todo|doing|approved) *$" "$TODO")"
+  B="$B"$'\n'"残り（todo・doing・approved）: $LEFT 件"$'\n'"次の候補: $(pick_story 2>/dev/null || echo なし)"
+  echo "$B"
+  REFILLED_ANY=""; finish_reports "$B"; REFILLED_ANY="$SAVED"
+  SEG=$(( SEG + 1 )); SEG_COUNT=0; SUMMARY=(); RAN_IDS=""
+  RUN_REPORT_DIR="$STATE/reports/run/$RUNSTAMP-p$SEG"
+}
+
 if [ -z "${TODO_LOOP_DRY:-}" ]; then
   if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
     echo "[todo-loop] 別の runner（pid $(cat "$LOCK")）が実行中のため見送り"; exit 0
@@ -439,38 +473,57 @@ if [ -z "${TODO_LOOP_DRY:-}" ]; then
   fi
 fi
 
-LIMIT_HIT=""; COUNT=0; STOP_REASON=""; RAN_SINCE_REFILL=1; LEDGER_LINE=""
+LIMIT_HIT=""; AUTH_FAIL=""; COUNT=0; STOP_REASON=""; RAN_SINCE_REFILL=1; LEDGER_LINE=""
 if [ -n "${TODO_LOOP_REFILL_ONLY:-}" ]; then   # 積むだけ（消化しない）。未着手が残っていても今の観点で積み足す
   if refill; then STOP_REASON="積むだけの指定（TODO_LOOP_REFILL_ONLY）"; else STOP_REASON="積み足せなかった（積むだけの指定）"; fi
+  [ -n "$AUTH_FAIL" ] && STOP_REASON="Claude のログインが切れていて開始できなかった（/login の後に再開）: $AUTH_FAIL"
   [ -n "${TODO_LOOP_DRY:-}" ] && exit 0   # DRY は回の一覧を出すだけ。報告も送信もしない
 fi
 while [ -z "${TODO_LOOP_REFILL_ONLY:-}" ]; do
   if [ -n "$UNTIL_TS" ] && [ "$(date +%s)" -ge "$UNTIL_TS" ]; then
     STOP_REASON="${TODO_LOOP_UNTIL} を過ぎたので新しいセッションを始めない"; break
   fi
+  RAN_NOW=""
   if run_one; then
     [ -n "${TODO_LOOP_DRY:-}" ] && exit 0
-    COUNT=$(( COUNT + 1 )); RAN_SINCE_REFILL=1
+    COUNT=$(( COUNT + 1 )); SEG_COUNT=$(( SEG_COUNT + 1 )); RAN_SINCE_REFILL=1; RAN_NOW=1
   else
     if [ -n "${TODO_LOOP_DRY:-}" ]; then echo "[todo-loop] 実行できるストーリーが無い（積み足しの対象）"; exit 0; fi
     if [ -z "$RAN_SINCE_REFILL" ] || [ -n "${TODO_LOOP_NO_REFILL:-}" ]; then
       STOP_REASON="実行できるストーリーが無い（積み足しの後も 0 件、または blocked・needs-user 待ち）"; break
     fi
-    RAN_SINCE_REFILL=""
+    if [ -z "$UNTIL_TS" ] && [ "$REFILLS" -ge "$MAX_REFILLS" ]; then
+      STOP_REASON="実行できるストーリーが無い（積み足しはこの起動で $REFILLS 回済み）"; break
+    fi
+    RAN_SINCE_REFILL=""; REFILLS=$(( REFILLS + 1 ))
     echo "[todo-loop] 実行できるストーリーが無い → lens-next で積む"
-    if ! refill && [ -z "$LIMIT_HIT" ]; then
+    if ! refill && [ -z "$LIMIT_HIT" ] && [ -z "$AUTH_FAIL" ]; then
       STOP_REASON="積み足せなかった"; break
     fi
+  fi
+  if [ -n "$AUTH_FAIL" ]; then
+    STOP_REASON="Claude のログインが切れていて開始できなかった（状態は変えていない。/login の後に再開）: $AUTH_FAIL"; break
   fi
   if [ -n "$LIMIT_HIT" ]; then
     RAN_SINCE_REFILL=1
     wait_limit && continue
     break
   fi
-  [ -n "$UNTIL_TS" ] || { [ "$COUNT" -ge "$COUNT_MAX" ] && { STOP_REASON="$COUNT 件実行（時刻指定なし）"; break; }; }
+  if [ -n "$REPORT_EVERY" ] && [ -n "$RAN_NOW" ] && [ "$SEG_COUNT" -ge "$REPORT_EVERY" ]; then interim_report; fi
+  [ "$COUNT" -ge "$MAX_STORIES" ] && { STOP_REASON="上限 $MAX_STORIES 件"; break; }
+  if [ -z "$UNTIL_TS" ] && [ -n "$RAN_NOW" ]; then   # 連鎖・件数の判定は、この周で実行したときだけ（積み足しの周では見ない）
+    if [ -n "$COUNT_MAX" ]; then
+      [ "$COUNT" -ge "$COUNT_MAX" ] && { STOP_REASON="$COUNT 件実行（件数の指定）"; break; }
+    elif [ "$LAST_SEC" -gt "$CHAIN_UNDER" ]; then
+      STOP_REASON="直前の回が $(( LAST_SEC / 60 )) 分かかった（連鎖は $(( CHAIN_UNDER / 60 )) 分以内の回だけ）"; break
+    elif [ $(( $(date +%s) - T0 )) -ge "$CHAIN_WINDOW" ]; then
+      STOP_REASON="起動から $(( CHAIN_WINDOW / 60 )) 分を過ぎた（連鎖の枠）"; break
+    fi
+  fi
 done
 
 BODY="[todo-loop $NAME] $DAY 実行 $COUNT 件"
+[ "$SEG" -gt 1 ] && BODY="$BODY（途中報告 $(( SEG - 1 )) 回の後の $SEG_COUNT 件）"
 for line in "${SUMMARY[@]+"${SUMMARY[@]}"}"; do BODY="$BODY"$'\n'"- $line"; done
 BODY="$BODY"$'\n'"停止理由: $STOP_REASON"$'\n'"次の候補: $(pick_story 2>/dev/null || echo なし)"
 echo "$BODY"
