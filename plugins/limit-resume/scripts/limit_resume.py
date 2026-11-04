@@ -10,6 +10,7 @@
 セッションにしか来ないので、開いているだけの別の窓は対象にならない。
 """
 import datetime as dt
+from collections import deque
 import json
 import os
 import re
@@ -109,10 +110,16 @@ def find_registry(session_id):
     return None
 
 
+def tail_lines(path, n):
+    """末尾 n 行を返す。会話記録は 100MB を超えるので、全体を読み込まず 1 行ずつ流す。"""
+    with open(path, encoding="utf-8", errors="replace", newline="\n") as f:
+        return list(deque(f, maxlen=n))
+
+
 def still_stopped_by_limit(transcript_path):
     """会話記録の最後の user/assistant が、上限のエラーのままか（user が自分で再開していないか）。"""
     try:
-        lines = Path(transcript_path).read_text().splitlines()[-400:]
+        lines = tail_lines(transcript_path, 400)
     except Exception:
         return None
     for line in reversed(lines):
@@ -128,7 +135,7 @@ def still_stopped_by_limit(transcript_path):
 
 def delivered(transcript_path, since):
     try:
-        lines = Path(transcript_path).read_text().splitlines()[-200:]
+        lines = tail_lines(transcript_path, 200)
     except Exception:
         return False
     for line in lines:
