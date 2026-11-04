@@ -98,10 +98,15 @@ CASES = [
         _msg("user", _text("ふざけるな commit すんな")),
         _msg("assistant", _text("客観事実: たぶん未コミットの可能性が高い。止まります。指示ください。"))]), 0),
 
-    # ── PASS: override marker (legit verified / meta) ──
-    ("ok_marker_passes", dict(rows=[
+    # ── PASS: 正当な理由を記録のコマンドで残したターン（応答に合図は書かない） ──
+    ("ok_record_command_passes", dict(rows=[
         _msg("user", _text("y")),
-        _msg("assistant", _text("gitignored の可能性が高いです。\n# COMMIT-STATUS-OK: 確認経路を別途提示済み"))]), 0),
+        _msg("assistant", _bash('python3 heaven/tools/commit_status_ok.py "確認経路を別途提示済み"')),
+        _msg("assistant", _text("gitignored の可能性が高いです。"))]), 0),
+    # ── BLOCK: 応答の中の旧い合図ではもう通さない ──
+    ("old_text_marker_blocks", dict(rows=[
+        _msg("user", _text("y")),
+        _msg("assistant", _text("gitignored の可能性が高いです。\n# COMMIT-STATUS-OK: 確認経路を別途提示済み"))]), 2),
 
     # ── PASS: loop guard (already a forced continuation) ──
     ("loop_guard_passes", dict(rows=[

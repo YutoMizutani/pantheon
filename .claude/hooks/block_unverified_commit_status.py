@@ -27,7 +27,7 @@ Block ONLY when ALL hold (conjunctive → high precision, fails open):
 Stop fires after the text is shown, so this can't pre-block; its value is the
 deterministic forced redo (exit 2): the model re-reads its turn and either removes
 the unsolicited status footnote, or runs the check and states the fact, or — if this
-is a legitimate verified/meta case — appends `# COMMIT-STATUS-OK: <根拠>` and re-emits.
+is a legitimate verified/meta case — runs `python3 heaven/tools/commit_status_ok.py "<根拠>"` (recorded, not printed) and re-emits.
 
 Safety / guard-conflict (must never block a mandated stop —
 feedback_never_anger_user_absolute): anger in the user's message → pass; an explicit
@@ -80,10 +80,10 @@ _USER_GIT_RAISED = re.compile(
 )
 
 # --- conjunct 2: a verification command actually ran this turn → pass. ----------
-_GIT_CHECK_RE = re.compile(r"git\s+(?:check-ignore|ls-files|status)", re.IGNORECASE)
+_GIT_CHECK_RE = re.compile(r"git\s+(?:check-ignore|ls-files|status)|commit_status_ok\.py", re.IGNORECASE)   # 正当な理由は heaven/tools/commit_status_ok.py で記録する（応答に合図を書かせない）
 
 # --- override + loop/anger guards. ---------------------------------------------
-_OK_MARKER = re.compile(r"#\s*COMMIT-STATUS-OK:\s*\S")
+_OK_MARKER = re.compile(r"(?!x)x")   # 応答の合図は廃止。理由は commit_status_ok.py で記録し _GIT_CHECK_RE が拾う
 # Narrowing to high precision (measured on 632 real transcripts): an ASSERTIVE
 # commit/tracking mention is usually legitimate (grounded "heaven/ は gitignored",
 # memory filenames, rule-editing, descriptive use) → too false-positive-prone to
@@ -266,7 +266,7 @@ _REASON = (
     "踏んで事実だけ言う。『可能性が高い』のような確認で潰せる推測は禁止。"
     "(`/projects/*` は全て gitignored が事実。)\n"
     "正当な場合 — user が直前に commit/git を訊いた・確認コマンドを既に踏んだ・git ルール自体を"
-    "編集/議論している — は本文に `# COMMIT-STATUS-OK: <根拠>` を添えて再送すれば通る(根拠は監査)。"
+    "編集/議論している — は `python3 heaven/tools/commit_status_ok.py '<根拠>'` を打って記録すれば通る（応答に合図は書かない）(根拠は監査)。"
 )
 
 
