@@ -88,7 +88,13 @@ def main() -> int:
     # --- 3. 二層昇格ポリシーの単一オーナー = self-reflection エージェント定義 ---
     # refactor で reminder からポリシー本文が抜かれたので、本文は agent 定義側で固定し、
     # hook 側は「その定義へ委譲している」ことだけ固定する (single owner per path)。
-    agent_def = (REPO / ".claude/agents/self-reflection.md").read_text(encoding="utf-8")
+    # 種類ごとの細かい手順は「出す直前に読む」参照ファイルへ分けたので、定義 + 参照を合わせて 1 つの持ち主とみなす
+    agent_def = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in [REPO / ".claude/agents/self-reflection.md",
+                  *sorted((REPO / ".claude/agent-refs/self-reflection").glob("*.md"))]
+    )
+    check("agent_def_points_to_refs", ".claude/agent-refs/self-reflection/" in agent_def)
     check("agent_def_offers_claude_local", "CLAUDE.local.md" in agent_def)
     check("agent_def_offers_rules_common", ".claude/rules/common/" in agent_def)
     check("agent_def_requires_layer_field", '"layer"' in agent_def)

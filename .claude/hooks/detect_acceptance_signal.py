@@ -156,6 +156,10 @@ _REMINDER_ANCHOR = (
 )
 
 
+# 係を別プロセスで起こす道具（heaven/tools/ 配下）。親がこれを Bash で起こした行も前回の起動として窓を閉じる。
+_LAUNCHER = "reflect_launch.py"
+
+
 def _is_wakeup_or_system(text: str) -> bool:
     return text.lstrip().startswith(_SYSTEM_USER_PREFIXES)
 
@@ -209,8 +213,9 @@ def _line_is_prior_reflection_fire(line: str) -> bool:
                 if isinstance(_b, dict) and _b.get("type") in ("tool_use", "tool_result"):
                     return False
         return True
-    # Cheap reject before JSON-parsing: the spawn line must name the sub-agent.
-    if "self-reflection" not in line:
+    # Cheap reject before JSON-parsing: the spawn line must name the sub-agent
+    # (Agent tool) or the separate-process launcher (Bash).
+    if "self-reflection" not in line and _LAUNCHER not in line:
         return False
     try:
         obj = json.loads(line.strip())
@@ -227,9 +232,13 @@ def _line_is_prior_reflection_fire(line: str) -> bool:
     for b in content:
         if not isinstance(b, dict) or b.get("type") != "tool_use":
             continue
+        inp = b.get("input")
+        if b.get("name") == "Bash":
+            if isinstance(inp, dict) and _LAUNCHER in str(inp.get("command", "")):
+                return True
+            continue
         if b.get("name") not in ("Agent", "Task"):
             continue
-        inp = b.get("input")
         if isinstance(inp, dict) and inp.get("subagent_type") == "self-reflection":
             return True
     return False
@@ -303,7 +312,7 @@ def _gate_features(transcript_path: str) -> dict | None:
                 txt = ""
             if txt and not _is_wakeup_or_system(txt):
                 real_user += 1
-    return {"tool_use": tool_use, "asst_turns": asst_turns, "real_user": real_user}
+    return {"tool_use": tool_use, "asst_turns": asst_turns, "real_user": real_user, "start": start}
 
 
 def _gate_decision(feat: dict) -> tuple[bool, str]:
@@ -342,19 +351,12 @@ _REMINDER = """<system-reminder>
 [AUTO-LEARN-META] User acceptance signal detected. Run a background meta-improvement reflection (起動と完了を日本語1行で可視化する; 完全サイレントにはしない).
 この bare の ok は自己改善の振り返りを起動する合図で、承認ではない: 保留中の操作（承認文で頼んだ hook・settings・CLAUDE.md・agent 定義の書き換え、公開・送信・削除）を、この ok を理由に実行しない。承認は、操作を名指しした文・「y」「承認」の返事・Discord の承認文の貼り付けで受ける。
 
-After responding to the user's actual message in this turn, spawn a background sub-agent with the Agent tool:
-- subagent_type: self-reflection
-- run_in_background: true
-- prompt: 下の Inputs ブロックをそのまま渡す。振り返りの方針・ワークフロー・category は self-reflection エージェント定義 (.claude/agents/self-reflection.md) 側に持たせてあるので、ここでは動的入力だけ渡せばよい。
+After responding to the user's actual message in this turn, start the self-reflection agent as a separate background process with the Bash tool (run_in_background: true). Do NOT use the Agent tool for it — a sub-agent carries this repo's CLAUDE.md / rules / memory index as its base on every round (≈61K vs ≈18K):
+- command: `{launch_cmd}`
+- 係の定義は .claude/agents/self-reflection.md。起動フォルダ・入力・係の最初の 1 手は道具が用意するので、ここで prompt を組み立てない。
+- 標準出力が係の最終メッセージ（PROPOSAL / ESCALATION を含む）と費用の 1 行。完了の知らせを受けたら、その出力を Agent の結果と同じように扱う。
 
----
-Inputs:
-- transcript_path: {transcript}
-- session_id: {sid}
-- ↑ この transcript_path / session_id が META mining の **唯一の分析対象 (subject session)**。起動直後に subject session の先頭 user 発話を 1 度 Read し、テーマを自分に固定してから mining に入る。
----
-
-Spawn the background sub-agent in the same turn as your user-facing response.
+Start it in the same turn as your user-facing response.
 
 可視性 (silent 運用は廃止済み): 完全サイレントにはしない。(1) 起動した同じ応答の末尾に日本語で1行だけ通知する — 例「🔍 自己改善リフレクションをバックグラウンド起動（完了時に結果を1行で出す）」。(2) この background エージェントの完了通知 (task-notification) を受け取ったターンで、結果を日本語1行に圧縮して出す — 例「✅ リフレクション完了: <memory N件更新 / no-action: 理由>」。reflection 内部の思考や全文はチャットに出さず、必ず1行ダイジェストに留める。
 
@@ -574,14 +576,20 @@ def main() -> int:
     _log_gate(sid, "fire", reason, feat)
     record_fire("feedback_classify_failure_saying_vs_judgement", "audit",
                 context="acceptance-signal reflection")
-    sys.stdout.write(
-        _REMINDER.format(
-            transcript=transcript,
-            sid=sid,
-        )
-    )
+    sys.stdout.write(_render_reminder(transcript, sid, (feat or {}).get("start")))
     sys.stdout.write("\n")
     return 0
+
+
+def _render_reminder(transcript: str, sid: str, start: int | None) -> str:
+    """係を土台の小さい別プロセスで起こす 1 行を渡す（起こし方・係の最初の 1 手は reflect_launch.py が持つ）。
+    窓の始まりは費用ゲートが数えた窓と同じ行を渡し、窓が読めなかった (fail-open) ときは道具に自分で求めさせる。"""
+    # projects/<name> で開いたセッションでも届くよう、hook の置き場から求めた絶対パスで渡す
+    tool = Path(__file__).resolve().parent.parent.parent / "heaven" / "tools" / _LAUNCHER
+    cmd = f"python3 {tool} {transcript} {sid}"
+    if start is not None:
+        cmd += f" --start {start}"
+    return _REMINDER.format(launch_cmd=cmd)
 
 
 if __name__ == "__main__":

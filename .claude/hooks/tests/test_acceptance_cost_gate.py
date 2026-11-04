@@ -58,6 +58,17 @@ def _reflection_spawn() -> list:
     ]
 
 
+def _reflection_bash_launch() -> list:
+    """係を repo 外向けの起動フォルダから `claude -p` で起こす形（reflect_launch.py を Bash で裏起動）。
+    Agent の tool_use が無いので、これも前回の起動として窓を閉じないと同じ作業を 2 度振り返る。"""
+    return [{
+        "type": "tool_use",
+        "name": "Bash",
+        "input": {"command": "python3 /x/heaven/tools/reflect_launch.py /t/a.jsonl sid --start 0",
+                  "run_in_background": True},
+    }]
+
+
 def _source_quote() -> list:
     """A tool_result that quotes this hook's own _REMINDER source verbatim — what a
     Read/Edit of detect_acceptance_signal.py produces. It carries the full
@@ -194,6 +205,17 @@ def main() -> int:
                 _msg("user", _text("大きいタスク")),
                 _msg("assistant", _tools(10)),
                 _msg("assistant", _reflection_spawn()),
+                _msg("user", _text("小さい追従")),
+                _msg("assistant", _tools(1)),
+            ],
+            False,
+        ),
+        (
+            "windowed_bash_launch_spawn_skips",
+            [
+                _msg("user", _text("大きいタスク")),
+                _msg("assistant", _tools(10)),
+                _msg("assistant", _reflection_bash_launch()),
                 _msg("user", _text("小さい追従")),
                 _msg("assistant", _tools(1)),
             ],
