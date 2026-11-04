@@ -32,6 +32,10 @@ Contract (NON-BLOCKING, fail-quiet):
     `case` patterns and Python subscripts in a heredoc are NOT grep args
     (2026-10-16: 29 of 78 fires were these false positives).
   - Skips when stdin is not a Bash tool_use, or grep/find/rg not present.
+  - Rewriting is opt-in via `--transform`, and only flag-value globs are rewritten
+    (`--include=*.py` → `--include='*.py'`, `-name *.py` → `-name '*.py'`); positional
+    globs like `dir/*.py` are never touched. The rewrite is returned as a bare
+    `updatedInput` (no permissionDecision); on any doubt the hook falls back to the hint.
 """
 import json
 import re
@@ -85,24 +89,36 @@ def _segments(cmd: str):
             yield seg
 
 
+def _verb_args(seg):
+    """Arguments after the search verb of a simple command, or None when the
+    verb (after env assignments and prefixes like sudo/xargs) is not a search verb."""
+    i = 0
+    while i < len(seg) and (
+        re.match(r"^\w+=", seg[i])
+        or seg[i] in _PREFIX
+        or (i > 0 and seg[i - 1] in _PREFIX and seg[i].startswith("-"))
+    ):
+        i += 1
+    if i >= len(seg) or seg[i].rsplit("/", 1)[-1] not in _SEARCH_VERBS:
+        return None
+    return seg[i + 1:]
+
+
+def _is_quoted(tok: str) -> bool:
+    return (tok.startswith("'") and tok.endswith("'")) or (
+        tok.startswith('"') and tok.endswith('"'))
+
+
 def _risky_unquoted_globs(cmd: str):
     """Yield offending raw tokens, looking only at arguments of a simple command
     whose verb is grep/rg/find. A token that still carries a leading ' or "
     (shlex posix=False keeps quote chars) was quoted by the author and is safe."""
     for seg in _segments(cmd):
-        i = 0
-        while i < len(seg) and (
-            re.match(r"^\w+=", seg[i])
-            or seg[i] in _PREFIX
-            or (i > 0 and seg[i - 1] in _PREFIX and seg[i].startswith("-"))
-        ):
-            i += 1
-        if i >= len(seg) or seg[i].rsplit("/", 1)[-1] not in _SEARCH_VERBS:
+        args = _verb_args(seg)
+        if args is None:
             continue
-        for tok in seg[i + 1:]:
-            if (tok.startswith("'") and tok.endswith("'")) or (
-                tok.startswith('"') and tok.endswith('"')
-            ):
+        for tok in args:
+            if _is_quoted(tok):
                 continue
             m = _INCLUDE_FLAG.match(tok)
             if m:
@@ -112,6 +128,99 @@ def _risky_unquoted_globs(cmd: str):
                 continue
             if not tok.startswith("-") and _GLOB_META.search(tok):
                 yield tok
+
+
+# --- transform (--transform opt-in): quote flag-value globs in place ---
+# Measured: in 30 days of
+# transcripts flag-value globs died 177 times vs 6 successes, positional globs ran
+# 1692 times vs 100 deaths — positional ones are intended shell expansion, left alone.
+_VALUE_FLAGS = {"-name", "-iname", "-path", "-ipath", "-wholename", "-g", "--glob", "--iglob"}
+
+
+def _flag_glob_hits(cmd: str):
+    """Yield (flag, token) per unquoted flag-value glob of a search verb. flag is
+    None for `--include=<glob>` tokens, else the preceding `_VALUE_FLAGS` token."""
+    for seg in _segments(cmd):
+        args = _verb_args(seg)
+        if args is None:
+            continue
+        for k, tok in enumerate(args):
+            if _is_quoted(tok):
+                continue
+            m = _INCLUDE_FLAG.match(tok)
+            if m:
+                val = m.group(1)
+                if not (val.startswith("'") or val.startswith('"')) and _GLOB_META.search(val):
+                    yield None, tok
+                continue
+            if (k > 0 and args[k - 1] in _VALUE_FLAGS and not tok.startswith("-")
+                    and _GLOB_META.search(tok)):
+                yield args[k - 1], tok
+
+
+def _quote_value(val: str):
+    """Quote a flag value so zsh stops globbing it but expands nothing less.
+    `$`/backtick keep expanding inside "..."; a value whose meaning quoting would
+    change (backslash escapes, embedded ", leading ~, {a,b} braces) gets None."""
+    if any(c in val for c in '\\"{') or val.startswith("~"):
+        return None
+    if "$" in val or "`" in val:
+        return None if "'" in val else f'"{val}"'
+    return f'"{val}"' if "'" in val else f"'{val}'"
+
+
+def _quoted_token(flag, tok: str):
+    if flag is None:
+        name, val = tok.split("=", 1)
+        q = _quote_value(val)
+        return None if q is None else f"{name}={q}"
+    return _quote_value(tok)
+
+
+def _quotable_flag_globs(cmd: str):
+    """[(original token, quoted token)] for the flag-value globs that can be quoted.
+    Positional globs are never returned."""
+    out = []
+    for flag, tok in _flag_glob_hits(cmd):
+        new = _quoted_token(flag, tok)
+        if new is not None:
+            out.append((tok, new))
+    return out
+
+
+def transform_command(cmd: str):
+    """Return (new_cmd, [(before, after), ...]). Positions are searched on a copy
+    whose heredoc bodies, quoted spans and comments are blanked out, so text inside
+    them is never touched. On any doubt — a token found a different number of times
+    than the parser saw it, an unquotable value, a flag-value glob left over, or an
+    unexpected length — return (cmd, []) and let the hint run."""
+    try:
+        from block_unquoted_equals_word import _mask_heredocs, _mask_quotes_and_comments
+    except Exception:
+        return cmd, []
+    hits = list(_flag_glob_hits(cmd))
+    if not hits:
+        return cmd, []
+    masked = _mask_quotes_and_comments(_mask_heredocs(cmd))
+    spans = []  # (start, end, replacement, (before, after))
+    for key in dict.fromkeys(hits):
+        flag, tok = key
+        new = _quoted_token(flag, tok)
+        if new is None:
+            return cmd, []
+        lead = "" if flag is None else re.escape(flag) + r"\s+"
+        pat = re.compile(rf"(?<![^\s;|&(]){lead}({re.escape(tok)})(?=[\s;|&)]|$)")
+        found = list(pat.finditer(masked))
+        if len(found) != hits.count(key):
+            return cmd, []
+        label = (tok, new) if flag is None else (f"{flag} {tok}", f"{flag} {new}")
+        spans += [(m.start(1), m.end(1), new, label) for m in found]
+    new_cmd = cmd
+    for start, end, rep, _ in sorted(spans, reverse=True):
+        new_cmd = new_cmd[:start] + rep + new_cmd[end:]
+    if list(_flag_glob_hits(new_cmd)) or len(new_cmd) != len(cmd) + 2 * len(spans):
+        return cmd, []
+    return new_cmd, [s[3] for s in sorted(spans)]
 
 
 # --- telemetry instrumentation (best-effort; never breaks the hook) ---
@@ -141,8 +250,31 @@ def main() -> None:
     if not offenders:
         return
 
+    if "--transform" in sys.argv[1:]:
+        new_cmd, changes = transform_command(cmd)
+        if changes:
+            done = ", ".join(f"{a} → {b}" for a, b in changes[:3])
+            note = (f"[zsh-glob transform] 引用符を補った: {done}"
+                    "（flag 値の glob は zsh の nomatch で命令ごと止まるため。検索の意味は同じ）")
+            rest = list(_risky_unquoted_globs(new_cmd))
+            if rest:
+                note += (f" 位置引数の裸 glob は書き換えていない: {', '.join(rest[:3])}。"
+                         "cwd に当たる物が無いと zsh が `no matches found` で命令を止める。"
+                         "引用するか、dir と --include='<glob>' に分ける。")
+            record_fire("feedback_quote_glob_in_grep_under_zsh", "transform",
+                        context=", ".join(f"{a}→{b}" for a, b in changes[:3])[:200],
+                        session_id=data.get("session_id"))
+            sys.stdout.write(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "updatedInput": {**data["tool_input"], "command": new_cmd},
+                "additionalContext": note,
+            }}, ensure_ascii=False))
+            sys.stdout.flush()
+            sys.exit(0)
+
     shown = ", ".join(offenders[:3])
-    record_fire("feedback_quote_glob_in_grep_under_zsh", "warn", context=shown[:200])
+    record_fire("feedback_quote_glob_in_grep_under_zsh", "warn", context=shown[:200],
+                session_id=data.get("session_id"))
     sys.stderr.write(
         "[zsh-glob hint] Unquoted glob passed to grep/find: "
         f"{shown}. zsh has `nomatch` on by default and will expand this against "
