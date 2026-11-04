@@ -41,9 +41,57 @@ SKIP_PARTS = {"example-infra", "node_modules", ".venv", "venv", ".next", "dist",
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 # 書き込みを伴う Bash の目安（誤検出しても、案件の CLAUDE.md を読めば通るので費用は小さい）
 BASH_WRITE_RE = re.compile(
-    r"(sed\s+-i|(?<![0-9&>])>>?\|?\s*(?!/dev/null)[^&\s>]|\btee\b|\b(mv|cp|rm|mkdir|touch|ln|rsync|install)\s|"
+    # sed / perl のインプレース編集は、-i の前に別のフラグや数字（-E -i・-0pi・-0777 -pi・--in-place）が入っても拾う
+    r"(\bsed\b[^|;&\n]*?\s(?:-[nErsuz]*i|--in-place)|(?<![0-9&>])>>?\|?\s*(?!/dev/null)[^&\s>]|\btee\b|\b(mv|cp|rm|mkdir|touch|ln|rsync|install)\s|"
     r"git\s+(checkout|restore|reset|apply|mv|rm)\b|\bopen\([^)]*['\"][wa]['\"]|write_text\(|"
-    r"\bpatch\s|\bperl\s+-[a-z]*i)")
+    r"\bpatch\s|\bperl\b[^|;&\n]*?\s-[0-9lnpaFwsx]*i)")
+
+# heredoc の本文は、受け取る命令でデータか台本かが決まる。文書を流すだけの命令（cat・git commit の本文など）は
+# 本文を見ない。それ以外（python・node・bash 等）は台本として、書き先になりえない文字列だけを消す。
+# 書き先が案件の中なら、シェルの部分（`cat > projects/...`）か台本の書き先の文字列に残る。
+# （一時フォルダの写しを書き換える python の本文で、試験の文章に出てくる projects/<X> を理由に止めていた）
+_HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n(.*?)\n[ \t]*\2[ \t]*(?:\n|$)", re.S)
+_DATA_CMDS = {"cat", "git", "gh", "echo", "printf", "wc", "grep", "rg", "diff", "jq", "head", "tail", "sort",
+              "pbcopy", "less", "mail"}
+_LIT_RE = re.compile(r"(?P<pre>[A-Za-z_.]*\(\s*)?(?P<q>'{3}|\"{3}|'|\")(?P<body>(?:\\.|(?!(?P=q)).)*?)(?P=q)", re.S)
+_KEEP_CALLS = ("open(", "Path(", "write_text(", "write_bytes(", "copy(", "copy2(", "copyfile(", "copytree(", "move(",
+               "rename(", "replace(", "unlink(", "remove(", "rmtree(", "mkdir(", "makedirs(", "touch(", "symlink_to(")
+
+
+def _heredoc_cmd(shell_before: str) -> str:
+    """`<<` の直前の命令の名前（env や VAR=値 は飛ばす）。"""
+    seg = re.split(r"\$\(|&&|\|\||[;|\n(]", shell_before)[-1]
+    for w in seg.split():
+        if w == "env" or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w) or w.startswith("-"):
+            continue
+        return Path(w).name
+    return ""
+
+
+def _strip_data_literals(body: str) -> str:
+    """台本の本文から、書き先になりえない文字列を消す。残すのは書き込み系の呼び出しの引数と、
+    空白を含まないパスだけの文字列（p='projects/<X>/a.py' のような代入）。"""
+    def repl(m):
+        pre = m.group("pre") or ""
+        if pre and any(pre.endswith(k) for k in _KEEP_CALLS):
+            return m.group(0)
+        if pre:
+            return pre + "''"
+        b = m.group("body")
+        return m.group(0) if PROJ_RE.search(b) and not re.search(r"\s", b) else "''"
+    return _LIT_RE.sub(repl, body)
+
+
+def bash_scan_text(cmd: str) -> str:
+    """Bash の命令のうち、案件名を拾う対象にする部分。"""
+    out, pos = [], 0
+    for m in _HEREDOC_RE.finditer(cmd):
+        out.append(cmd[pos:m.start(3)])
+        if _heredoc_cmd(cmd[pos:m.start()]) not in _DATA_CMDS:
+            out.append(_strip_data_literals(m.group(3)))
+        pos = m.end(3)
+    out.append(cmd[pos:])
+    return "".join(out)
 
 
 def state_path(session_id: str) -> Path:
@@ -96,6 +144,8 @@ def main() -> int:
     # （別の案件のログ・試験の本文に出てくるパスで、その案件の未読を理由に止めていた）
     if tool in WRITE_TOOLS:
         blob = " ".join(str(tool_input.get(k) or "") for k in ("file_path", "notebook_path"))
+    elif tool == "Bash":
+        blob = bash_scan_text(str(tool_input.get("command") or ""))
     else:
         blob = json.dumps(tool_input, ensure_ascii=False)
     names = []  # 値は "<a>" / "<a>/<b>" のような projects/ からの相対ディレクトリ

@@ -95,6 +95,32 @@ check("outside-project-passes", rc == 0 and not out.strip(), f"rc={rc}")
 rc, out, err = run("Write", {"file_path": "/tmp/x.md", "content": f"見た: {TARGET}"}, [])
 check("write-content-path-not-target", rc == 0, f"rc={rc} err={err[:200]}")
 
+# 9〜14. heredoc の本文: スクリプトの文字列や文書に案件のパスが出てくるだけなら止めない。書き先なら止める
+#        （一時フォルダの写しを書き換える python の本文で、試験の文章に出てくる projects/<X> を理由に止めていた）
+py_doc = "cd /tmp && python3 - <<'EOF'\nopen('/tmp/t.py','w').write(\"body = '操作: rm -rf " + str(TARGET) + "'\")\nEOF"
+rc, out, err = run("Bash", {"command": py_doc}, [])
+check("py-heredoc-string-not-target", rc == 0, f"rc={rc} err={err[:200]}")
+
+cat_doc = f"cat > /tmp/note.md <<'EOF'\n見た場所: {TARGET} の 3 行目\nEOF"
+rc, out, err = run("Bash", {"command": cat_doc}, [])
+check("cat-heredoc-prose-not-target", rc == 0, f"rc={rc} err={err[:200]}")
+
+py_assign = f"python3 - <<'EOF'\np='{TARGET}'\nopen(p,'w').write('x')\nEOF"
+rc, out, err = run("Bash", {"command": py_assign}, [])
+check("py-heredoc-assigned-target-blocks", rc == 2, f"rc={rc}")
+
+py_open = f"python3 - <<'EOF'\nopen('{TARGET}', 'w').write('x')\nEOF"
+rc, out, err = run("Bash", {"command": py_open}, [])
+check("py-heredoc-open-target-blocks", rc == 2, f"rc={rc}")
+
+sh_cp = f"bash <<'EOF'\ncp /tmp/a {TARGET}\nEOF"
+rc, out, err = run("Bash", {"command": sh_cp}, [])
+check("bash-heredoc-cp-target-blocks", rc == 2, f"rc={rc}")
+
+cat_target = f"cat > {TARGET} <<'EOF'\nx\nEOF"
+rc, out, err = run("Bash", {"command": cat_target}, [])
+check("cat-heredoc-to-target-blocks", rc == 2, f"rc={rc}")
+
 if fails:
     print("FAIL\n" + "\n".join(fails))
     sys.exit(1)
