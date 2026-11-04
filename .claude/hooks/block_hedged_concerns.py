@@ -29,10 +29,17 @@ On hit:
     of regressions (regardless of exit code).
   * Emits a stderr feedback line so the next turn can self-correct.
 
-Exit 0 always — this hook does not abort, it audits + reminds. The Stop
-event fires after the assistant text is already displayed, so true
-pre-display blocking is not available; the value here is closing the
-self-recall gap by inserting a deterministic post-turn signal.
+Exit 0 for 1-4 — they audit + remind. The Stop event fires after the
+assistant text is already displayed, so true pre-display blocking is not
+available; the value here is closing the self-recall gap by inserting a
+deterministic post-turn signal.
+
+  5. Command hand-off (blocking, exit 2) — a fenced command block plus a
+     phrase telling the user to run it (実行すれば / 打ってください …).
+     The turn is redone: run it yourself, or state in one line what is
+     missing (permission rule / mode) and stop. Not when the user asked for
+     a command, nor on the redo turn (stop_hook_active).
+     (実例: 自動モードに拒否された取り下げを、コマンドごと user に渡した)
 """
 
 from __future__ import annotations
@@ -80,6 +87,14 @@ _USER_ACTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"動けば OK"),
     re.compile(r"ダメなら次の指示"),
 )
+
+# Pattern set 5: command hand-off (blocking). A command block alone is a report of
+# what was run; it is a hand-off only with a phrase telling the user to run it.
+_HANDOFF_PHRASE = re.compile(
+    r"実行すれば|実行して(?:ください|下さい|もらえれば)|"
+    r"(?:打|叩|走らせ|流)って(?:ください|下さい|もらえれば)|ターミナルで(?:次|以下)")
+_CODE_BLOCK = re.compile(r"```[^\n]*\n(.*?)```", re.S)
+_ASKED_FOR_COMMAND = re.compile(r"コマンド|どう(?:打|実行)|手順を教え|やり方")
 
 # Pattern set 3: uncertainty / concern triggers (positive emission rule).
 # Per feedback_positive_emission_markers: semantic concepts that grammar-level
@@ -192,6 +207,41 @@ def _scan_current_turn_assistant_text(transcript_path: str) -> str | None:
     if not turn_parts:
         return None
     return "\n".join(turn_parts)
+
+
+def _last_user_text(transcript_path: str) -> str:
+    """Text of the latest user prompt (tool results skipped)."""
+    last = ""
+    try:
+        for line in iter_lines(transcript_path):
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            msg = obj.get("message") if isinstance(obj, dict) else None
+            if not isinstance(msg, dict) or msg.get("role") != "user":
+                continue
+            content = msg.get("content")
+            if isinstance(content, str):
+                last = content
+            elif isinstance(content, list):
+                texts = [str(c.get("text", "")) for c in content
+                         if isinstance(c, dict) and c.get("type") == "text"]
+                if texts:
+                    last = "\n".join(texts)
+    except OSError:
+        return ""
+    return last
+
+
+def _command_handoff(text: str, user_text: str) -> str:
+    """The hand-off phrase if `text` gives the user a command block to run, else ""."""
+    if _ASKED_FOR_COMMAND.search(user_text or ""):
+        return ""
+    if not any(b.strip() for b in _CODE_BLOCK.findall(text)):
+        return ""
+    m = _HANDOFF_PHRASE.search(_CODE_BLOCK.sub("", text))
+    return m.group(0) if m else ""
 
 
 def _find_hits(
@@ -344,6 +394,16 @@ def main() -> int:
             f"[block_hedged_concerns] exploratory trigger without marker: {tokens}. "
             "Per feedback_positive_emission_markers: attach [探索範囲: ...] + [中断条件: ...] in same paragraph, or commit to the action.\n"
         )
+
+    handoff = "" if data.get("stop_hook_active") else _command_handoff(text, _last_user_text(transcript))
+    if handoff:
+        record_fire("feedback_minimize_user_actions_absolute", "block", context=f"handoff:{handoff}")
+        sys.stderr.write(
+            f"[block_hedged_concerns] コマンドを user に渡して実行させている（「{handoff}」）。役割逆転禁止に反する。"
+            "自分で実行する経路を探して実行する。権限や承認で止まっているなら、何が要るか（許可の規則・権限モード）を"
+            "1 行で書いて止まる。コマンドを user の端末で実行させる形で渡さない。\n"
+        )
+        return 2
 
     return 0
 
