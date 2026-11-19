@@ -16,6 +16,7 @@ PreToolUse の拒否として返した行（本文が `PreToolUse:<Tool> hook er
   止められた後に同じ入力で呼び直すこと自体は、読んでから書く・答えてから続けるなど正しい使い方でも
   起きるので数えない。止められた後も同じ入力で止められ続けたものだけが空回り。
 - 最大連続: 1 つの入力が同じ hook に止められた回数の最大。
+- API 要求の写しの行（type が `api-request-blob`）は数えない。同じ tool_result は 1 回だけ数える。
 - 会話: 拒否のあった transcript の数と、空回りのあった transcript の数。
 - 走査: `~/.claude/projects/<slug>/*.jsonl`（slug = repo の絶対パスの英数字以外を `-` にした物。
   repo は `CLAUDE_PROJECT_DIR`、無ければ作業フォルダ）。`--subagents` で subagent のサブフォルダも含める。
@@ -108,6 +109,7 @@ def scan(files, since: str = "") -> dict:
     for f in files:
         seen = {}  # tool_use_id -> ツール名 + 引数
         cnt = collections.Counter()  # (hook, ツール名 + 引数) -> 止められた回数
+        counted = set()  # 数えた tool_result の tool_use_id（同じ結果を 2 回数えない）
         try:
             fh = open(f, encoding="utf-8", errors="replace")
         except OSError:
@@ -121,6 +123,10 @@ def scan(files, since: str = "") -> dict:
                 ts = d.get("timestamp") or ""
                 if since and ts and ts < since:
                     continue
+                # API 要求の写しは、それまでの tool_use・tool_result を同じ id のまま含む。
+                # 数えると 1 回の拒否が 2 回になり、同じ入力の再拒否（空回り）にも見える。
+                if d.get("type") == "api-request-blob":
+                    continue
                 content = (d.get("message") or {}).get("content")
                 if not isinstance(content, list):
                     continue
@@ -130,6 +136,11 @@ def scan(files, since: str = "") -> dict:
                     if b.get("type") == "tool_use":
                         seen[b.get("id")] = (b.get("name") or "") + json.dumps(b.get("input"), sort_keys=True, ensure_ascii=False)
                     elif b.get("type") == "tool_result":
+                        rid = b.get("tool_use_id")
+                        if rid is not None:
+                            if rid in counted:
+                                continue
+                            counted.add(rid)
                         text = _result_text(b.get("content"))
                         if not is_denial(text):
                             continue
